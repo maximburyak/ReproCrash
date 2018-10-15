@@ -17,7 +17,7 @@ namespace Repro
             Console.WriteLine("Starting...");
             // byte[] filebytes1 = File.ReadAllBytes("/home/cesar/Sources/tmpcommand.txt");
 
-            for (int ss = 0; ss < 100; ss++)
+            for (int ss = 0; ss < 1000; ss++)
             {                
                 Console.WriteLine("************ " + ss + " ***********");
                 Parallel.For(0, 20, a =>

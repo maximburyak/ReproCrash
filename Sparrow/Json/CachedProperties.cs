@@ -23,9 +23,6 @@ namespace Sparrow.Json
         private readonly JsonOperationContext _context;
         private int _propertyNameCounter;
 
-        private Sorter<BlittableJsonDocumentBuilder.PropertyTag, PropertySorter> _sorter;
-
-
         private struct PropertySorter : IComparer<BlittableJsonDocumentBuilder.PropertyTag>
         {
             private readonly CachedProperties properties;
@@ -126,7 +123,6 @@ namespace Sparrow.Json
         public CachedProperties(JsonOperationContext context)
         {
             _context = context;
-            _sorter = new Sorter<BlittableJsonDocumentBuilder.PropertyTag, PropertySorter>(new PropertySorter(this));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
