@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
 using Sparrow.Json.Parsing;
-using Sparrow.Threading;
 
 namespace Sparrow.Json
 {
@@ -19,8 +18,6 @@ namespace Sparrow.Json
         private readonly IJsonParser _reader;
         private readonly JsonParserState _state;
         private LazyStringValue _fakeFieldName;
-
-        private readonly SingleUseFlag _disposed = new SingleUseFlag();
 
         private WriteToken _writeToken;
         private  string _debugTag;
@@ -122,9 +119,7 @@ namespace Sparrow.Json
 
         public void Dispose()
         {
-            if (_disposed.Raise() == false)
-                return;
-
+         
            // _writer.Dispose();
           //  GlobalCache.Free(_cacheItem);
         }

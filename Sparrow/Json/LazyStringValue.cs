@@ -70,17 +70,6 @@ namespace Sparrow.Json
             _length = -1;
         }
 
-        static LazyStringValue()
-        {
-            // ThreadLocalCleanup.ReleaseThreadLocalState += CleanBuffers;
-        }
-
-        public static void CleanBuffers()
-        {
-            _lazyStringTempBuffer = null;
-            _lazyStringTempComparisonBuffer = null;
-        }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(string other)
         {

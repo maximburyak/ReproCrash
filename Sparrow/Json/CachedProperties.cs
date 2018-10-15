@@ -23,28 +23,6 @@ namespace Sparrow.Json
         private readonly JsonOperationContext _context;
         private int _propertyNameCounter;
 
-        private struct PropertySorter : IComparer<BlittableJsonDocumentBuilder.PropertyTag>
-        {
-            private readonly CachedProperties properties;
-
-            public PropertySorter(CachedProperties props)
-            {
-                properties = props;
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public int Compare(BlittableJsonDocumentBuilder.PropertyTag x, BlittableJsonDocumentBuilder.PropertyTag y)
-            {
-                var compare = x.Property.GlobalSortOrder - y.Property.GlobalSortOrder;
-                if (compare == 0)
-                {
-                    properties._hasDuplicates = true;
-                    return y.Position - x.Position;
-                }
-                return compare;
-            }
-        }
-
         public sealed class PropertyName : IComparable<PropertyName>
         {
             public readonly int HashCode;

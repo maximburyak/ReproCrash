@@ -10,9 +10,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Sparrow.Global;
 using Sparrow.Json.Parsing;
-using Sparrow.Threading;
 
 #if VALIDATE
 using Sparrow.Platform;
@@ -106,9 +104,6 @@ namespace Sparrow.Json
             }
             return allocateStringValue;
         }
-                   
-        public const int LargeBufferSize = 128 * Constants.Size.Kilobyte;
-        
        
         internal unsafe class BufferSegment
         {
@@ -126,41 +121,21 @@ namespace Sparrow.Json
 
         public int Generation => _generation;
 
-        public long AllocatedMemory => _arenaAllocator.TotalUsed;
-
-        protected readonly SharedMultipleUseFlag LowMemoryFlag;
-
         public static JsonOperationContext ShortTermSingleUse()
         {
-            return new JsonOperationContext(4096, 1024, SharedMultipleUseFlag.None);
+            return new JsonOperationContext(4096, 1024);
         }
 
-        public JsonOperationContext(int initialSize, int longLivedSize, SharedMultipleUseFlag lowMemoryFlag)
+        public JsonOperationContext(int initialSize, int longLivedSize)
         {
-            Debug.Assert(lowMemoryFlag != null);
-            _disposeOnceRunner = new DisposeOnce<ExceptionRetry>(() =>
-            {
-#if MEM_GUARD_STACK
-                ElectricFencedMemory.DecrementConext();
-                ElectricFencedMemory.UnRegisterContextAllocation(this);
-#endif
-
-                Reset(true);
-
-                _documentBuilder.Dispose();
-                _arenaAllocator.Dispose();
-                _arenaAllocatorForLongLivedValues?.Dispose();
-
-            });
 
             _initialSize = initialSize;
             _longLivedSize = longLivedSize;
-            _arenaAllocator = new ArenaMemoryAllocator(lowMemoryFlag, initialSize);
-            _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator(lowMemoryFlag, longLivedSize);
+            _arenaAllocator = new ArenaMemoryAllocator();
+            _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
             CachedProperties = new CachedProperties(this);
             _jsonParserState = new JsonParserState();
             _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);
-            LowMemoryFlag = lowMemoryFlag;
 
 #if MEM_GUARD_STACK
             ElectricFencedMemory.IncrementConext();
@@ -179,9 +154,6 @@ namespace Sparrow.Json
             var allocatedMemory = _arenaAllocator.Allocate(requestedSize);
             allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
-#if DEBUG
-            allocatedMemory.IsLongLived = false;
-#endif
             return allocatedMemory;
         }
 
@@ -205,9 +177,6 @@ namespace Sparrow.Json
             var allocatedMemory = _arenaAllocatorForLongLivedValues.Allocate(requestedSize);
             allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
-#if DEBUG
-            allocatedMemory.IsLongLived = true;
-#endif
             return allocatedMemory;
         }
 
@@ -217,11 +186,12 @@ namespace Sparrow.Json
         }
 
     
-        private readonly DisposeOnce<ExceptionRetry> _disposeOnceRunner;
-        private bool Disposed => _disposeOnceRunner.Disposed;
         public  void Dispose()
         {
-            _disposeOnceRunner.Dispose();
+            Disposed = true;
+            Reset(true);
+
+            _documentBuilder.Dispose();
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -306,66 +276,15 @@ namespace Sparrow.Json
             }
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe LazyStringValue GetLazyStringValue(byte* ptr)
-        {
-            // See format of the lazy string ID in the GetLowerIdSliceAndStorageKey method
-            var size = BlittableJsonReaderBase.ReadVariableSizeInt(ptr, 0, out var offset);
-            return AllocateStringValue(null, ptr + offset, size);
-        }
-
-        public BlittableJsonReaderObject ReadForDisk(Stream stream, string documentId)
-        {
-            return ParseToMemory(stream, documentId, BlittableJsonDocumentBuilder.UsageMode.ToDisk);
-        }
-
-    
-        public BlittableJsonReaderObject ReadForMemory(Stream stream, string documentId)
-        {
-            return ParseToMemory(stream, documentId, BlittableJsonDocumentBuilder.UsageMode.None);
-        }
-
-        public unsafe BlittableJsonReaderObject ReadForMemory(string jsonString, string documentId)
-        {
-            // todo: maybe use ManagedPinnedBuffer here
-            var maxByteSize = Encoding.UTF8.GetMaxByteCount(jsonString.Length);
-
-            fixed (char* val = jsonString)
-            {
-                var buffer = ArrayPool<byte>.Shared.Rent(maxByteSize);
-                try
-                {
-                    fixed (byte* buf = buffer)
-                    {
-                        Encoding.UTF8.GetBytes(val, jsonString.Length, buf, maxByteSize);
-                        using (var ms = new MemoryStream(buffer))
-                        {
-                            return ReadForMemory(ms, documentId);
-                        }
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
-            }
-        }
-
-        public BlittableJsonReaderObject Read(Stream stream, string documentId)
-        {
-            var state = BlittableJsonDocumentBuilder.UsageMode.ToDisk;
-            return ParseToMemory(stream, documentId, state);
-        }
-
         private BlittableJsonReaderObject ParseToMemory(Stream stream, string debugTag, BlittableJsonDocumentBuilder.UsageMode mode)
         {
             var bytes = new byte[1024 * 64];
-            return ParseToMemory(stream, debugTag, mode, new Span<byte>(bytes) );
+            return ParseToMemory(stream, debugTag, mode, (bytes) );
         }
 
         public unsafe BlittableJsonReaderObject ParseToMemory(Stream stream, string debugTag,
             BlittableJsonDocumentBuilder.UsageMode mode,
-            Span<byte> bytes)
+            byte[] bytes)
         {
 
             EnsureNotDisposed();
@@ -381,7 +300,7 @@ namespace Sparrow.Json
                 {
                     if (valid == used)
                     {
-                        var read = stream.Read(bytes);
+                        var read = stream.Read(bytes, 0, bytes.Length);
                         EnsureNotDisposed();
                         if (read == 0)
                             throw new EndOfStreamException("Stream ended without reaching end of json content");
@@ -425,6 +344,7 @@ namespace Sparrow.Json
             }
         }
 
+        public bool Disposed;
         private void EnsureNotDisposed()
         {
             if (Disposed)
@@ -452,10 +372,9 @@ namespace Sparrow.Json
 
         protected internal virtual void Renew()
         {
-            _arenaAllocator.RenewArena();
             if (_arenaAllocatorForLongLivedValues == null)
             {
-                _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator(LowMemoryFlag, _longLivedSize);
+                _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
                 CachedProperties = new CachedProperties(this);
             }
         }
@@ -474,8 +393,7 @@ namespace Sparrow.Json
             // When a context is re-used, the buffer containing those field names was not reset and the strings are still valid and alive.
 
             var allocatorForLongLivedValues = _arenaAllocatorForLongLivedValues;
-            if (allocatorForLongLivedValues != null &&
-                (allocatorForLongLivedValues.Allocated > _initialSize || forceReleaseLongLivedAllocator))
+            if (allocatorForLongLivedValues != null || forceReleaseLongLivedAllocator)
             {
                 foreach (var mem in _fieldNames.Values)
                 {
@@ -485,16 +403,9 @@ namespace Sparrow.Json
                 }
 
                 _arenaAllocatorForLongLivedValues = null;
-                // at this point, the long lived section is far too large, this is something that can happen
-                // if we have dynamic properties. A back of the envelope calculation gives us roughly 32K 
-                // property names before this kicks in, which is a true abuse of the system. In this case, 
-                // in order to avoid unlimited growth, we'll reset the long lived section
-                allocatorForLongLivedValues.Dispose();
-
                 _fieldNames.Clear();
                 CachedProperties = null; // need to release this so can be collected
             }
-            _arenaAllocator.ResetArena();
             _numberOfAllocatedStringsValues = 0;
             _generation = _generation + 1;
 
@@ -649,12 +560,6 @@ namespace Sparrow.Json
             return stringBuffer;
         }
 
-        public bool GrowAllocation(AllocatedMemoryData allocation, int sizeIncrease)
-        {
-            EnsureNotDisposed();
-            return _arenaAllocator.GrowAllocation(allocation, sizeIncrease);
-        }
-
         public MemoryStream CheckoutMemoryStream()
         {
             EnsureNotDisposed();
@@ -693,47 +598,8 @@ namespace Sparrow.Json
 #endif
         }
 
-        public AvoidOverAllocationScope AvoidOverAllocation()
-        {
-            EnsureNotDisposed();
-            _arenaAllocator.AvoidOverAllocation = true;
-            return new AvoidOverAllocationScope(this);
-        }
-
-        public struct AvoidOverAllocationScope : IDisposable
-        {
-            private JsonOperationContext _parent;
-            public AvoidOverAllocationScope(JsonOperationContext parent)
-            {
-                _parent = parent;
-            }
-
-            public void Dispose()
-            {
-                _parent._arenaAllocator.AvoidOverAllocation = false;
-            }
-        }
 
         private Dictionary<Type, (Action<Array> Releaser, List<Array> Array)> _pooledArrays = null;
 
-        public T[] AllocatePooledArray<T>(int size)
-        {
-            if (_pooledArrays == null)
-                _pooledArrays = new Dictionary<Type, (Action<Array> Releaser, List<Array> Array)>();
-            
-            
-
-            if (_pooledArrays.TryGetValue(typeof(T), out var allocationsArray) == false)
-            {
-                void Releaser(Array x) => ArrayPool<T>.Shared.Return((T[])x, true);
-
-                allocationsArray = (Releaser, new List<Array>());
-                _pooledArrays[typeof(T)] = allocationsArray;
-            }
-
-            var allocatedArray = ArrayPool<T>.Shared.Rent(size);
-            allocationsArray.Array.Add(allocatedArray);
-            return allocatedArray;
-        }
     }
 }

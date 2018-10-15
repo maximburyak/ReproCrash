@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using Sparrow.Platform.Posix;
 
 namespace Sparrow
 {
@@ -21,7 +22,7 @@ namespace Sparrow
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int CompareInline(void* p1, void* p2, int size)
         {
-            return UnmanagedMemory.Compare((byte*)p1, (byte*)p2, size);
+            return Syscall.Compare((byte*)p1, (byte*)p2, size);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -44,7 +45,7 @@ namespace Sparrow
         
         private static void BulkCopy(void* dest, void* src, long n)
         {
-            UnmanagedMemory.Copy((byte*)dest, (byte*)src, n);            
+            Syscall.Copy((byte*)dest, (byte*)src, n);            
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -105,7 +106,7 @@ namespace Sparrow
             }
             else
             {
-                UnmanagedMemory.Set(dest, value, n);
+                Syscall.Set(dest, value, n);
             }
 
             Finish:

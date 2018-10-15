@@ -101,22 +101,7 @@ namespace Sparrow.Json
         {
             return WriteValue((double)value);
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int WriteValue(LazyNumberValue value)
-        {
-            return WriteValue(value.Inner);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int WriteValue(byte value)
-        {
-            var startPos = _position;
-            //_unmanagedWriteBuffer.WriteByte(value);
-            _position++;
-            return startPos;
-        }
-
+        
         private static string EnsureDecimalPlace(double value, string text)
         {
             if (double.IsNaN(value) || double.IsInfinity(value) || double.IsNegativeInfinity(value) || text.IndexOf('.') != -1 || text.IndexOf('E') != -1 || text.IndexOf('e') != -1)
@@ -481,18 +466,6 @@ namespace Sparrow.Json
 //            return startPos;
             token = BlittableJsonToken.String;
             return 1;
-        }
-
-        private static unsafe int GetSizeIncludingEscapeSequences(byte* buffer, int size)
-        {
-            var escapeSequencePos = size;
-            // now need to also include the size of the escape positions
-            var numberOfEscapeSequences = BlittableJsonReaderBase.ReadVariableSizeInt(buffer, ref escapeSequencePos);
-            for (int i = 0; i < numberOfEscapeSequences; i++)
-            {
-                BlittableJsonReaderBase.ReadVariableSizeInt(buffer, ref escapeSequencePos);
-            }
-            return escapeSequencePos;
         }
 
 

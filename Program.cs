@@ -6,7 +6,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Sparrow.Json;
 using Sparrow.Json.Parsing;
-using Sparrow.Threading;
 
 namespace Repro
 {
@@ -44,7 +43,7 @@ namespace Repro
         {
             MemoryStream stream = new MemoryStream(filebytes1,0,filebytes1.Length, true, true);            
             var state = new JsonParserState();
-            using(var ctx = new JsonOperationContext(1024* 32, 1024*128, SharedMultipleUseFlag.None))
+            using(var ctx = new JsonOperationContext(1024* 32, 1024*128))
             using (var sssssssss = JsonOperationContext.ShortTermSingleUse())
             using (var parser = new UnmanagedJsonParser(sssssssss, state, "ourtest"))
             {

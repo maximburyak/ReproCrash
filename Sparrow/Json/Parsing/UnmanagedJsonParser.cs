@@ -933,8 +933,7 @@ ReturnFalse:
 
         public string GenerateErrorState()
         {
-            var s = Encoding.UTF8.GetString(_inputBuffer, (int)_bufSize);
-            return " (" + _line + "," + _charPos + ") around: " + s;
+            return " (" + _line + "," + _charPos + ")";
         }
     }
 }
