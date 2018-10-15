@@ -15,7 +15,7 @@ namespace Repro
         {
             Console.WriteLine("Starting...");
 
-            for (int ss = 0; ss < 1000; ss++)
+            for (int ss = 0; ss < 50; ss++)
             {                
                 Console.WriteLine("************ " + ss + " ***********");
                 Parallel.For(0, 20, a =>

@@ -320,25 +320,21 @@ namespace Sparrow.Json
             CompleteArrayValue
         }
 
-        public struct BuildingState
+        public class BuildingState
         {
             public ContinuationState State;
-            public int MaxPropertyId;
             public int? CurrentPropertyId;
             public List<PropertyTag> Properties;
             public List<BlittableJsonToken> Types;
             public List<int> Positions;
-            public long FirstWrite;
 
             public BuildingState(ContinuationState state)
             {
                 State = state;
-                MaxPropertyId = 0;
                 CurrentPropertyId = null;
                 Properties = null;
                 Types = null;
                 Positions = null;
-                FirstWrite = 0;
             }
         }
 
