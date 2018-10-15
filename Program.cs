@@ -26,7 +26,7 @@ namespace Repro
                     for (int i = 0; i < 1; i++)
                     {
                         ParseFile(filebytes1);
-                    }                           LCIDConversionAttribute
+                    }                           
 
                 });
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);                
