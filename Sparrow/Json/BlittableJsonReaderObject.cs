@@ -5,7 +5,6 @@ using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Runtime.CompilerServices;
-using Sparrow.Binary;
 using Sparrow.Json.Parsing;
 
 namespace Sparrow.Json
@@ -13,7 +12,6 @@ namespace Sparrow.Json
     public unsafe class BlittableJsonReaderObject : BlittableJsonReaderBase, IDisposable
     {
         private AllocatedMemoryData _allocatedMemory;
-        private UnmanagedWriteBuffer _buffer;
         private byte* _metadataPtr;
         private readonly int _size;
         private readonly int _propCount;
@@ -22,7 +20,7 @@ namespace Sparrow.Json
         private readonly bool _isRoot;
         private byte* _objStart;
 
-        public DynamicJsonValue Modifications;
+//        public DynamicJsonValue Modifications;
 
         private Dictionary<StringSegment, object> _objectsPathCache;
         private Dictionary<int, object> _objectsPathCacheByIndex;
@@ -43,14 +41,13 @@ namespace Sparrow.Json
             _context.Write(stream, this);
         }
 
-        public BlittableJsonReaderObject(byte* mem, int size, JsonOperationContext context, UnmanagedWriteBuffer buffer = default(UnmanagedWriteBuffer))
+        public BlittableJsonReaderObject(byte* mem, int size, JsonOperationContext context)
             : base(context)
         {
             if (size == 0)
                 ThrowOnZeroSize(size);
 
             _isRoot = true;
-            _buffer = buffer;
             _mem = mem; // get beginning of memory pointer
             _size = size; // get document size
 
@@ -168,8 +165,6 @@ namespace Sparrow.Json
             }
         }
 
-        public ulong DebugHash => Hashing.XXHash64.Calculate(_mem, (ulong)_size);
-
 
         /// <summary>
         /// Returns an array of property names, ordered in the order it was stored 
@@ -193,8 +188,9 @@ namespace Sparrow.Json
             }
 
             // sort according to offsets
-            Sorter<int, string, NumericDescendingComparer> sorter;
-            sorter.Sort(offsets, propertyNames);
+//            Sorter<int, string> sorter;
+//            sorter.Sort(offsets, propertyNames);
+            Array.Sort(offsets, propertyNames);
 
             return propertyNames;
         }
@@ -274,19 +270,19 @@ namespace Sparrow.Json
                 obj = (T)result;
             }
             //just in case -> have better exception in this use-case
-            else if (typeof(T) == typeof(BlittableJsonReaderObject) &&
-                     result.GetType() == typeof(BlittableJsonReaderArray))
-            {
-                obj = default(T);
-                ThrowFormatException(result, result.GetType().FullName, nameof(BlittableJsonReaderObject));
-            }
-            //just in case -> have better exception in this use-case
-            else if (typeof(T) == typeof(BlittableJsonReaderArray) &&
-                     result.GetType() == typeof(BlittableJsonReaderObject))
-            {
-                obj = default(T);
-                ThrowFormatException(result, result.GetType().FullName, nameof(BlittableJsonReaderArray));
-            }
+//            else if (typeof(T) == typeof(BlittableJsonReaderObject) &&
+//                     result.GetType() == typeof(BlittableJsonReaderArray))
+//            {
+//                obj = default(T);
+//                ThrowFormatException(result, result.GetType().FullName, nameof(BlittableJsonReaderObject));
+//            }
+//            //just in case -> have better exception in this use-case
+//            else if (typeof(T) == typeof(BlittableJsonReaderArray) &&
+//                     result.GetType() == typeof(BlittableJsonReaderObject))
+//            {
+//                obj = default(T);
+//                ThrowFormatException(result, result.GetType().FullName, nameof(BlittableJsonReaderArray));
+//            }
             else
             {
                 obj = default(T);
@@ -301,7 +297,7 @@ namespace Sparrow.Json
                     {
                         if (ChangeTypeToString(result, out string dateTimeString) == false)
                             ThrowFormatException(result, result.GetType().FullName, "string");
-                        if (DateTime.TryParseExact(dateTimeString, DefaultFormat.DateTimeFormatsToRead, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
+                        if (DateTime.TryParseExact(dateTimeString, "o", CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind,
                                 out DateTime time) == false)
                             ThrowFormatException(result, result.GetType().FullName, "DateTime");
                         obj = (T)(object)time;
@@ -310,7 +306,7 @@ namespace Sparrow.Json
                     {
                         if (ChangeTypeToString(result, out string dateTimeOffsetString) == false)
                             ThrowFormatException(result, result.GetType().FullName, "string");
-                        if (DateTimeOffset.TryParseExact(dateTimeOffsetString, DefaultFormat.DateTimeFormatsToRead, CultureInfo.InvariantCulture,
+                        if (DateTimeOffset.TryParseExact(dateTimeOffsetString, "o", CultureInfo.InvariantCulture,
                                 DateTimeStyles.RoundtripKind, out DateTimeOffset time) == false)
                             ThrowFormatException(result, result.GetType().FullName, "DateTimeOffset");
                         obj = (T)(object)time;
@@ -340,12 +336,6 @@ namespace Sparrow.Json
                                 break;
                             case LazyNumberValue lazyNumberValue:
                                 obj = (T)Convert.ChangeType(lazyNumberValue, type);
-                                break;
-                            case LazyCompressedStringValue lazyCompressStringValue:
-                                if (type == typeof(LazyStringValue))
-                                    obj = (T)(object)lazyCompressStringValue.ToLazyStringValue();
-                                else
-                                    obj = (T)Convert.ChangeType(lazyCompressStringValue.ToString(), type);
                                 break;
                             default:
                                 obj = (T)Convert.ChangeType(result, type);
@@ -427,9 +417,7 @@ namespace Sparrow.Json
                 case null:
                     str = null;
                     return true;
-                case LazyCompressedStringValue lazyCompressedStringValue:
-                    str = lazyCompressedStringValue;
-                    return true;
+              
                 case LazyStringValue lazyStringValue:
                     str = lazyStringValue;
                     return true;
@@ -643,49 +631,6 @@ NotFound:
             public int[] Offsets;
         }
 
-        public int GetPropertiesByInsertionOrder(PropertiesInsertionBuffer buffers)
-        {
-            if (_metadataPtr == null)
-                ThrowObjectDisposed();
-
-            if (buffers.Properties == null ||
-                buffers.Properties.Length < _propCount)
-            {
-                var size = Bits.NextPowerOf2(_propCount);
-                buffers.Properties = new int[size];
-                buffers.Offsets = new int[size];
-            }
-
-            var metadataSize = _currentOffsetSize + _currentPropertyIdSize + sizeof(byte);
-            for (int i = 0; i < _propCount; i++)
-            {
-                var propertyIntPtr = _metadataPtr + i * metadataSize;
-                buffers.Offsets[i] = ReadNumber(propertyIntPtr, _currentOffsetSize);
-                buffers.Properties[i] = i;
-            }
-
-            Sorter<int, int, NumericDescendingComparer> sorter;
-            sorter.Sort(buffers.Offsets, buffers.Properties, 0, _propCount);
-            return _propCount;
-        }
-
-        public ulong GetHashOfPropertyNames()
-        {
-            ulong hash = (ulong)_propCount;
-            for (int i = 0; i < _propCount; i++)
-            {
-                var propertyNameOffsetPtr = _propNames + sizeof(byte) + i * _propNamesDataOffsetSize;
-                var propertyNameOffset = ReadNumber(propertyNameOffsetPtr, _propNamesDataOffsetSize);
-
-                // Get the relative "In Document" position of the property Name
-                var propRelativePos = (int)(_propNames - propertyNameOffset - _mem);
-                var size = ReadVariableSizeInt(propRelativePos, out var offset);
-
-                hash = Hashing.XXHash64.Calculate(_mem + propRelativePos + offset, (ulong)size, hash);
-            }
-            return hash;
-        }
-
         public int[] GetPropertiesByInsertionOrder()
         {
             var props = new int[_propCount];
@@ -698,8 +643,9 @@ NotFound:
                 props[i] = i;
             }
 
-            Sorter<int, int, NumericDescendingComparer> sorter;
-            sorter.Sort(offsets, props);
+//            Sorter<int, int, NumericDescendingComparer> sorter;
+//            sorter.Sort(offsets, props);
+            Array.Sort(offsets, props);
             return props;
         }
 
@@ -723,13 +669,11 @@ NotFound:
             {
                 case BlittableJsonToken.EmbeddedBlittable:
                     return ReadNestedObject(position);
-                case BlittableJsonToken.StartArray:
-                    return new BlittableJsonReaderArray(position, _parent ?? this, type)
-                    {
-                        NoCache = NoCache
-                    };
-                case BlittableJsonToken.CompressedString:
-                    return ReadCompressStringLazily(position);
+//                case BlittableJsonToken.StartArray:
+//                    return new BlittableJsonReaderArray(position, _parent ?? this, type)
+//                    {
+//                        NoCache = NoCache
+//                    };
                 case BlittableJsonToken.Boolean:
                     return ReadNumber(_mem + position, 1) == 1;
                 case BlittableJsonToken.Null:
@@ -745,7 +689,7 @@ NotFound:
         {
             if (_mem == null) //double dispose will do nothing
                 return;
-            if (_allocatedMemory != null && _buffer.IsDisposed == false)
+            if (_allocatedMemory != null)
             {
                 _context.ReturnMemory(_allocatedMemory);
                 _allocatedMemory = null;
@@ -765,8 +709,6 @@ NotFound:
 
                 _context.ReleasePathCache(_objectsPathCache, _objectsPathCacheByIndex);
             }
-
-            _buffer.Dispose();
         }
 
         public void CopyTo(byte* ptr)
@@ -789,8 +731,8 @@ NotFound:
 
         public BlittableJsonReaderObject Clone(JsonOperationContext context)
         {
-            if (_parent != null)
-                return context.ReadObject(this, "cloning nested obj");
+//            if (_parent != null)
+//                return context.ReadObject(this, "cloning nested obj");
 
             var mem = context.GetMemory(Size);
 
@@ -799,14 +741,14 @@ NotFound:
             {
                 _allocatedMemory = mem
             };
-            if (Modifications != null)
-            {
-                cloned.Modifications = new DynamicJsonValue(cloned);
-                foreach (var property in Modifications.Properties)
-                {
-                    cloned.Modifications.Properties.Enqueue(property);
-                }
-            }
+//            if (Modifications != null)
+//            {
+//             //   cloned.Modifications = new DynamicJsonValue(cloned);
+//                foreach (var property in Modifications.Properties)
+//                {
+//                    cloned.Modifications.Properties.Enqueue(property);
+//                }
+//            }
 
             return cloned;
         }
@@ -1027,17 +969,6 @@ NotFound:
             return current;
         }
 
-        public void AddItemsToStream<T>(ManualBlittableJsonDocumentBuilder<T> writer)
-            where T : struct, IUnmanagedWriteBuffer
-        {
-            for (var i = 0; i < Count; i++)
-            {
-                var prop = new PropertyDetails();
-                GetPropertyByIndex(i, ref prop);
-                writer.WritePropertyName(prop.Name);
-                writer.WriteValue(ProcessTokenTypeFlags(prop.Token), prop.Value);
-            }
-        }
 
         private static void ThrowInvalidTokenType()
         {
@@ -1134,11 +1065,11 @@ NotFound:
 
             data.NoCache = true;
 
-            if (assertRemovals && data.Modifications?.Removals?.Count > 0)
-                throw new InvalidOperationException($"Modifications (removals) detected in '{id}'. JSON: {data}");
-
-            if (assertProperties && data.Modifications?.Properties.Count > 0)
-                throw new InvalidOperationException($"Modifications (properties) detected in '{id}'. JSON: {data}");
+//            if (assertRemovals && data.Modifications?.Removals?.Count > 0)
+//                throw new InvalidOperationException($"Modifications (removals) detected in '{id}'. JSON: {data}");
+//
+//            if (assertProperties && data.Modifications?.Properties.Count > 0)
+//                throw new InvalidOperationException($"Modifications (properties) detected in '{id}'. JSON: {data}");
 
             if (assertChildren == false)
                 return;
@@ -1152,19 +1083,19 @@ NotFound:
                     AssertNoModifications(inner, id, assertChildren: true);
                     continue;
                 }
-
-                var innerArray = property as BlittableJsonReaderArray;
-                if (innerArray == null)
-                    continue;
-
-                foreach (var item in innerArray)
-                {
-                    var innerItem = item as BlittableJsonReaderObject;
-                    if (innerItem == null)
-                        continue;
-
-                    AssertNoModifications(innerItem, id, assertChildren: true);
-                }
+//
+//                var innerArray = property as BlittableJsonReaderArray;
+//                if (innerArray == null)
+//                    continue;
+//
+//                foreach (var item in innerArray)
+//                {
+//                    var innerItem = item as BlittableJsonReaderObject;
+//                    if (innerItem == null)
+//                        continue;
+//
+//                    AssertNoModifications(innerItem, id, assertChildren: true);
+//                }
             }
         }
 

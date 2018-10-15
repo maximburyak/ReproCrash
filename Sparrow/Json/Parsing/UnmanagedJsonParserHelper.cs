@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading.Tasks;
 
 namespace Sparrow.Json.Parsing
@@ -82,7 +83,7 @@ namespace Sparrow.Json.Parsing
             string peepedWindow;
             try
             {
-                peepedWindow = Encodings.Utf8.GetString(peepingTomStream.PeepInReadStream());
+                peepedWindow = Encoding.UTF8.GetString(peepingTomStream.PeepInReadStream());
             }
             catch (Exception e)
             {

@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
-using Sparrow.Collections;
 
 namespace Sparrow.Json.Parsing
 {
@@ -15,6 +14,11 @@ namespace Sparrow.Json.Parsing
         public JsonParserTokenContinuation Continuation;
 
         public readonly List<int> EscapePositions = new List<int>();
+
+        public JsonParserState()
+        {
+          
+        }
        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteVariableSizeInt(ref byte* dest, int value)
@@ -124,6 +128,7 @@ namespace Sparrow.Json.Parsing
 
         public void Reset()
         {
+        
             StringBuffer = null;
             StringSize = 0;
             CompressedSize = null;

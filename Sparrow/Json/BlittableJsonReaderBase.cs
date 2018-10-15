@@ -164,17 +164,6 @@ namespace Sparrow.Json
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public LazyCompressedStringValue ReadCompressStringLazily(int pos)
-        {
-            byte offset;
-            var uncompressedSize = ReadVariableSizeInt(pos, out offset);
-            pos += offset;
-            var compressedSize = ReadVariableSizeInt(pos, out offset);
-            pos += offset;
-            return new LazyCompressedStringValue(null, _mem + pos, uncompressedSize, compressedSize, _context);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int ReadVariableSizeInt(int pos, out byte offset)
         {
             return ReadVariableSizeInt(_mem, pos, out offset);

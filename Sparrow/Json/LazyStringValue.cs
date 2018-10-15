@@ -4,68 +4,30 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using Sparrow.Binary;
-using Sparrow.Utils;
+using System.Text;
 
 namespace Sparrow.Json
 {
-    public class LazyStringValueComparer : IEqualityComparer<LazyStringValue>
-    {
-        public static readonly LazyStringValueComparer Instance = new LazyStringValueComparer();
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(LazyStringValue x, LazyStringValue y)
-        {
-            if (x == y)
-                return true;
-            if (x == null || y == null)
-                return false;
-            return x.Equals(y);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetHashCode(LazyStringValue obj)
-        {
-            unsafe
-            {
-                //PERF: JIT will remove the corresponding line based on the target architecture using dead code removal.                                 
-                if (IntPtr.Size == 4)
-                    return (int)Hashing.XXHash32.CalculateInline(obj.Buffer, obj.Size);
-                return (int)Hashing.XXHash64.CalculateInline(obj.Buffer, (ulong)obj.Size);
-            }
-        }
-    }
-
-    public struct LazyStringValueStructComparer : IEqualityComparer<LazyStringValue>
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(LazyStringValue x, LazyStringValue y)
-        {
-            if (x == y)
-                return true;
-            if (x == null || y == null)
-                return false;
-            return x.CompareTo(y) == 0;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetHashCode(LazyStringValue obj)
-        {
-            unsafe
-            {
-                //PERF: JIT will remove the corresponding line based on the target architecture using dead code removal.                                 
-                if (IntPtr.Size == 4)
-                    return (int)Hashing.XXHash32.CalculateInline(obj.Buffer, obj.Size);
-                return (int)Hashing.XXHash64.CalculateInline(obj.Buffer, (ulong)obj.Size);
-            }
-        }
-    }
-
     // PERF: Sealed because in CoreCLR 2.0 it will devirtualize virtual calls methods like GetHashCode.
     public sealed unsafe class LazyStringValue : IComparable<string>, IEquatable<string>,
         IComparable<LazyStringValue>, IEquatable<LazyStringValue>, IDisposable, IComparable
     {
-        internal readonly JsonOperationContext _context;
+        internal JsonOperationContext __context;
+        internal JsonOperationContext _context
+        {
+            get
+            {
+
+                Console.WriteLine(Environment.StackTrace);
+                return __context;
+            }
+            set
+            {
+                 
+                __context = value;
+            }
+        }
+
         private string _string;
 
         private byte* _buffer;
@@ -83,7 +45,7 @@ namespace Sparrow.Json
             {
                 // Lazily load the length from the buffer. This is an O(n)
                 if (_length == -1 && Buffer != null)
-                    _length = Encodings.Utf8.GetCharCount(Buffer, Size);
+                    _length = Encoding.UTF8.GetCharCount(Buffer, Size);
                 return _length;
             }
         }
@@ -110,7 +72,7 @@ namespace Sparrow.Json
 
         static LazyStringValue()
         {
-            ThreadLocalCleanup.ReleaseThreadLocalState += CleanBuffers;
+            // ThreadLocalCleanup.ReleaseThreadLocalState += CleanBuffers;
         }
 
         public static void CleanBuffers()
@@ -130,15 +92,15 @@ namespace Sparrow.Json
             if (_string != null)
                 return string.Equals(_string, other, StringComparison.Ordinal);
 
-            var sizeInBytes = Encodings.Utf8.GetMaxByteCount(other.Length);
+            var sizeInBytes = Encoding.UTF8.GetMaxByteCount(other.Length);
 
             if (_lazyStringTempComparisonBuffer == null || _lazyStringTempComparisonBuffer.Length < other.Length)
-                _lazyStringTempComparisonBuffer = new byte[Bits.NextPowerOf2(sizeInBytes)];
+                _lazyStringTempComparisonBuffer = new byte[(sizeInBytes)];
 
             fixed (char* pOther = other)
             fixed (byte* pBuffer = _lazyStringTempComparisonBuffer)
             {
-                var tmpSize = Encodings.Utf8.GetBytes(pOther, other.Length, pBuffer, sizeInBytes);
+                var tmpSize = Encoding.UTF8.GetBytes(pOther, other.Length, pBuffer, sizeInBytes);
                 if (Size != tmpSize)
                     return false;
 
@@ -166,15 +128,15 @@ namespace Sparrow.Json
             if (_string != null)
                 return string.Compare(_string, other, StringComparison.Ordinal);
 
-            var sizeInBytes = Encodings.Utf8.GetMaxByteCount(other.Length);
+            var sizeInBytes = Encoding.UTF8.GetMaxByteCount(other.Length);
 
             if (_lazyStringTempComparisonBuffer == null || _lazyStringTempComparisonBuffer.Length < other.Length)
-                _lazyStringTempComparisonBuffer = new byte[Bits.NextPowerOf2(sizeInBytes)];
+                _lazyStringTempComparisonBuffer = new byte[(sizeInBytes)];
 
             fixed (char* pOther = other)
             fixed (byte* pBuffer = _lazyStringTempComparisonBuffer)
             {
-                var tmpSize = Encodings.Utf8.GetBytes(pOther, other.Length, pBuffer, sizeInBytes);
+                var tmpSize = Encoding.UTF8.GetBytes(pOther, other.Length, pBuffer, sizeInBytes);
                 return Compare(pBuffer, tmpSize);
             }
         }
@@ -243,7 +205,7 @@ namespace Sparrow.Json
                 self.ThrowAlreadyDisposed();
 #endif
             return self._string ??
-                (self._string = Encodings.Utf8.GetString(self._buffer, self._size));
+                (self._string = Encoding.UTF8.GetString(self._buffer, self._size));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -290,16 +252,13 @@ namespace Sparrow.Json
             return ReferenceEquals(obj, this);
         }
 
-        public override int GetHashCode()
+        public unsafe override int GetHashCode()
         {
 #if DEBUG
             if (IsDisposed)
                 ThrowAlreadyDisposed();
 #endif
-            if (IntPtr.Size == 4)
-                return (int)Hashing.XXHash32.CalculateInline(Buffer, Size);
-            else
-                return (int)Hashing.XXHash64.CalculateInline(Buffer, (ulong)Size);
+            return Encoding.UTF8.GetString(Buffer, Size).GetHashCode();
         }
 
         public override string ToString()
@@ -490,10 +449,10 @@ namespace Sparrow.Json
             ValidateIndexes(startIndex, count);
 
             if (_lazyStringTempBuffer == null || _lazyStringTempBuffer.Length < Length)
-                _lazyStringTempBuffer = new char[Bits.NextPowerOf2(Length)];
+                _lazyStringTempBuffer = new char[(Length)];
 
             fixed (char* pChars = _lazyStringTempBuffer)
-                Encodings.Utf8.GetChars(Buffer, Size, pChars, Length);
+                Encoding.UTF8.GetChars(Buffer, Size, pChars, Length);
 
             for (int i = startIndex; i < startIndex + count; i++)
             {
@@ -555,10 +514,10 @@ namespace Sparrow.Json
             ValidateIndexes(startIndex, count);
 
             if (_lazyStringTempBuffer == null || _lazyStringTempBuffer.Length < Length)
-                _lazyStringTempBuffer = new char[Bits.NextPowerOf2(Length)];
+                _lazyStringTempBuffer = new char[(Length)];
 
             fixed (char* pChars = _lazyStringTempBuffer)
-                Encodings.Utf8.GetChars(Buffer, Size, pChars, Length);
+                Encoding.UTF8.GetChars(Buffer, Size, pChars, Length);
 
             for (int i = startIndex; i < startIndex + count; i++)
             {
@@ -576,7 +535,7 @@ namespace Sparrow.Json
 
         public int LastIndexOf(char value)
         {
-            return LastIndexOf(value, Length, Length);
+            return LastIndexOf(value, Length - 1, Length);
         }
 
         public int LastIndexOf(char value, int startIndex)
@@ -592,15 +551,15 @@ namespace Sparrow.Json
             if (_string != null)
                 return _string.LastIndexOf(value, startIndex, count);
 
-            ValidateIndexes(Length - startIndex, count);
+            ValidateIndexes(Length - startIndex - 1, count);
 
             if (_lazyStringTempBuffer == null || _lazyStringTempBuffer.Length < Length)
-                _lazyStringTempBuffer = new char[Bits.NextPowerOf2(Length)];
+                _lazyStringTempBuffer = new char[(Length)];
 
             fixed (char* pChars = _lazyStringTempBuffer)
-                Encodings.Utf8.GetChars(Buffer, Size, pChars, Length);
+                Encoding.UTF8.GetChars(Buffer, Size, pChars, Length);
 
-            for (int i = startIndex; i > startIndex - count; i++)
+            for (int i = startIndex; i > startIndex - count; i--)
             {
                 if (_lazyStringTempBuffer[i] == value)
                     return i;
@@ -644,7 +603,7 @@ namespace Sparrow.Json
 
         public int LastIndexOfAny(char[] anyOf)
         {
-            return LastIndexOfAny(anyOf, Length, Length);
+            return LastIndexOfAny(anyOf, Length - 1, Length);
         }
 
         public int LastIndexOfAny(char[] anyOf, int startIndex)
@@ -656,18 +615,19 @@ namespace Sparrow.Json
         {
             if (IsDisposed)
                 ThrowAlreadyDisposed();
+
             if (_string != null)
                 return _string.LastIndexOfAny(anyOf, startIndex, count);
 
-            ValidateIndexes(Length - startIndex, count);
+            ValidateIndexes(Length - startIndex - 1, count);
 
             if (_lazyStringTempBuffer == null || _lazyStringTempBuffer.Length < Length)
-                _lazyStringTempBuffer = new char[Bits.NextPowerOf2(Length)];
+                _lazyStringTempBuffer = new char[(Length)];
 
             fixed (char* pChars = _lazyStringTempBuffer)
-                Encodings.Utf8.GetChars(Buffer, Size, pChars, Length);
+                Encoding.UTF8.GetChars(Buffer, Size, pChars, Length);
 
-            for (int i = startIndex; i > startIndex - count; i++)
+            for (int i = startIndex; i > startIndex - count; i--)
             {
                 if (anyOf.Contains(_lazyStringTempBuffer[i]))
                     return i;
@@ -941,9 +901,9 @@ namespace Sparrow.Json
             if (IsDisposed)
                 ThrowAlreadyDisposed();
 
-            var maxCharCount = Encodings.Utf8.GetMaxCharCount(Length);
+            var maxCharCount = Encoding.UTF8.GetMaxCharCount(Length);
             if (_lazyStringTempBuffer == null || _lazyStringTempBuffer.Length < maxCharCount)
-                _lazyStringTempBuffer = new char[Bits.NextPowerOf2(maxCharCount)];
+                _lazyStringTempBuffer = new char[(maxCharCount)];
 
             var buffer = _buffer;
 
@@ -964,7 +924,7 @@ namespace Sparrow.Json
         {
             fixed (char* pChars = _lazyStringTempBuffer)
             {
-                var chars = Encodings.Utf8.GetChars(buffer, Length, pChars, _lazyStringTempBuffer.Length);
+                var chars = Encoding.UTF8.GetChars(buffer, Length, pChars, _lazyStringTempBuffer.Length);
                 Array.Reverse(_lazyStringTempBuffer, 0, chars);
                 return new string(_lazyStringTempBuffer, 0, chars);
             }

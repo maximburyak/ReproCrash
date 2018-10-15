@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
-using Sparrow.Exceptions;
 
 namespace Sparrow.Platform.Posix
 {
@@ -32,7 +31,7 @@ namespace Sparrow.Platform.Posix
             try
             {
                 if (Syscall.mincore(address, new IntPtr(length), pVec) != 0)
-                    throw new MemoryInfoException($"Failed to mincore address: {new IntPtr(address).ToInt64()}, with length: {length}. Last Error = {Marshal.GetLastWin32Error()}");
+                    throw new InvalidOperationException($"Failed to mincore address: {new IntPtr(address).ToInt64()}, with length: {length}. Last Error = {Marshal.GetLastWin32Error()}");
 
                 for (var i = 0; i < vecSize; i++)
                 {

@@ -1,5 +1,9 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
+using Sparrow.Platform.Posix;
+using Voron.Platform.Posix;
 
 namespace Sparrow.Json.Parsing
 {
@@ -65,7 +69,7 @@ namespace Sparrow.Json.Parsing
                 }
             }
 
-            public string DebugInfo => Encodings.Utf8.GetString(Address, Used);
+            public string DebugInfo => Encoding.UTF8.GetString(Address, Used);
 #endif
         }
 
@@ -200,7 +204,7 @@ namespace Sparrow.Json.Parsing
 
             // Grow by doubling segment size until we get to 1 MB, then just use 1 MB segments
             // otherwise a document with 17 MB will waste 15 MB and require very big allocations
-            var segmentSize = Math.Max(Bits.NextPowerOf2(required), _head.Allocation.SizeInBytes * 2);
+            var segmentSize = Math.Max((required), _head.Allocation.SizeInBytes * 2);
             const int oneMb = 1024 * 1024;
             if (segmentSize > oneMb && required <= oneMb)
                 segmentSize = oneMb;

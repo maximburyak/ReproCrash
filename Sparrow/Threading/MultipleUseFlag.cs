@@ -85,9 +85,7 @@ namespace Sparrow.Threading
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Lower()
         {
-            var rc = Interlocked.CompareExchange(ref _state, 0, 1);
-            
-            return rc == 1;
+            return Interlocked.CompareExchange(ref _state, 0, 1) == 1;
         }
 
         /// <summary>

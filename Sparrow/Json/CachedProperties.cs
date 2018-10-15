@@ -1,10 +1,8 @@
 ﻿using System;
 using System.Linq;
 using System.Collections.Generic;
-using Sparrow.Collections;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using Sparrow.Binary;
 
 namespace Sparrow.Json
 {
@@ -120,7 +118,7 @@ namespace Sparrow.Json
 
         private readonly List<PropertyName> _docPropNames = new List<PropertyName>();
         private readonly SortedDictionary<PropertyName, object> _propertiesSortOrder = new SortedDictionary<PropertyName, object>();
-        private readonly Dictionary<LazyStringValue, PropertyName> _propertyNameToId = new Dictionary<LazyStringValue, PropertyName>(default(LazyStringValueStructComparer));
+        private readonly Dictionary<LazyStringValue, PropertyName> _propertyNameToId = new Dictionary<LazyStringValue, PropertyName>();
         private bool _propertiesNeedSorting;
 
         public int PropertiesDiscovered;
@@ -261,10 +259,10 @@ namespace Sparrow.Json
             int hash = 0;
             for (int i = 0; i < count; i++)
             {
-                hash = Hashing.HashCombiner.CombineInline(hash, properties[i].Property.HashCode);
+                hash += properties[i].Property.HashCode;
             }
 
-            Debug.Assert(_cachedSorts.Length == CachedSortsSize && Bits.NextPowerOf2(CachedSortsSize) == CachedSortsSize); 
+//            Debug.Assert(_cachedSorts.Length == CachedSortsSize && Bits.NextPowerOf2(CachedSortsSize) == CachedSortsSize); 
 
             hash &= (CachedSortsSize-1); // % CachedSortsSize 
             return hash;
@@ -272,8 +270,6 @@ namespace Sparrow.Json
 
         private void UnlikelySortProperties(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
         {
-            if ( 0 == 0)
-                return;
             _hasDuplicates = false;
 
             var index = GetPropertiesHashedIndex(properties);
@@ -294,7 +290,7 @@ namespace Sparrow.Json
 
             _cachedSorts[index].FinalCount = properties.Count;
 
-            // properties.Sort(ref _sorter);
+            properties.Sort();// ADIADI :: ref _sorter);
 
             // The item comparison method has a side effect, which can modify the _hasDuplicates field.
             // This can either be true or false at any given time. 

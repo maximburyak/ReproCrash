@@ -1,8 +1,8 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.Contracts;
 using System.Runtime.CompilerServices;
-using Sparrow.Binary;
 
 namespace Sparrow
 {
@@ -24,7 +24,7 @@ namespace Sparrow
             if (keys.Length < 2)
                 return;
 
-            IntroSort(keys, 0, keys.Length - 1, 2 * Bits.FloorLog2(keys.Length));
+            IntroSort(keys, 0, keys.Length - 1, 2 * (int)Math.Floor(Math.Log(keys.Length)));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -35,7 +35,7 @@ namespace Sparrow
             if (length < 2)
                 return;
 
-            IntroSort(keys, index, length + index - 1, 2 * Bits.FloorLog2(keys.Length));
+            IntroSort(keys, index, length + index - 1, 2 * (int)Math.Floor(Math.Log(keys.Length)));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -296,7 +296,7 @@ namespace Sparrow
             if (keys.Length < 2)
                 return;
 
-            IntroSort(keys, values, 0, keys.Length - 1, 2 * Bits.FloorLog2(keys.Length));
+            IntroSort(keys, values, 0, keys.Length - 1,2 * (int)Math.Floor(Math.Log(keys.Length)));
         }
 
         public void Sort(T[] keys, V[] values, int index, int length)
@@ -306,7 +306,7 @@ namespace Sparrow
             if (length < 2)
                 return;
 
-            IntroSort(keys, values, index, length + index - 1, 2 * Bits.FloorLog2(keys.Length));
+            IntroSort(keys, values, index, length + index - 1, 2 * (int)Math.Floor(Math.Log(keys.Length)));
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

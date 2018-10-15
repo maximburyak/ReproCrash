@@ -1,127 +1,10 @@
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
-using Sparrow.Utils;
-using Bits = Sparrow.Binary.Bits;
 
 namespace Sparrow
 {
-    public class CaseInsensitiveStringSegmentEqualityComparer : IEqualityComparer<StringSegment>
-    {
-        public static CaseInsensitiveStringSegmentEqualityComparer Instance = new CaseInsensitiveStringSegmentEqualityComparer();
-
-        [ThreadStatic]
-        private static char[] _buffer;
-
-        static CaseInsensitiveStringSegmentEqualityComparer()
-        {
-            ThreadLocalCleanup.ReleaseThreadLocalState += () => _buffer = null;
-        }
-
-        public bool Equals(StringSegment x, StringSegment y)
-        {
-            if (x.Length != y.Length)
-                return false;
-            var compare = string.Compare(x.Buffer, x.Offset, y.Buffer, y.Offset, x.Length, StringComparison.OrdinalIgnoreCase);
-            return compare == 0;
-        }
-
-        public unsafe int GetHashCode(StringSegment str)
-        {
-            if (_buffer == null || _buffer.Length < str.Length)
-                _buffer = new char[Bits.NextPowerOf2(str.Length)];
-
-            for (int i = 0; i < str.Length; i++)
-            {
-                _buffer[i] = char.ToUpperInvariant(str.Buffer[str.Offset + i]);
-            }
-
-            fixed (char* p = _buffer)
-            {
-                //PERF: JIT will remove the corresponding line based on the target architecture using dead code removal.                                 
-                if (IntPtr.Size == 4)
-                    return (int)Hashing.XXHash32.CalculateInline((byte*)p, str.Length * sizeof(char));
-                return (int)Hashing.XXHash64.CalculateInline((byte*)p, (ulong)str.Length * sizeof(char));
-            }
-        }
-    }
-
-    public struct StringSegmentEqualityStructComparer : IEqualityComparer<StringSegment>
-    {
-        public static IEqualityComparer<StringSegment> BoxedInstance = new StringSegmentEqualityComparer();
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(StringSegment x, StringSegment y)
-        {
-            int xSize = x.Length;
-            int ySize = y.Length;
-            if (xSize != ySize)
-                goto ReturnFalse;  // PERF: Because this method is going to be inlined, in case of false we will want to jump at the end.     
-
-            int xStart = x.Offset;
-            int yStart = y.Offset;
-            string xStr = x.Buffer;
-            string yStr = y.Buffer;
-            for (int i = 0; i < xSize; i++)
-            {
-                if (xStr[xStart + i] != yStr[yStart + i])
-                    goto ReturnFalse;
-            }
-            return true;
-
-            ReturnFalse: return false;
-
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int GetHashCode(StringSegment x)
-        {            
-            int xStart = x.Offset;
-            int xSize = x.Length;
-            string xStr = x.Buffer;
-
-            uint hash = 0;
-            for (int i = 0; i < xSize; i++)
-            {
-                hash = Hashing.Combine(hash, xStr[xStart + i]);
-            }
-
-            return (int)hash;
-        }
-    }
-
-    public class StringSegmentEqualityComparer : IEqualityComparer<StringSegment>
-    {
-        public static StringSegmentEqualityComparer Instance = new StringSegmentEqualityComparer();
-
-
-        public unsafe bool Equals(StringSegment x, StringSegment y)
-        {
-            if (x.Length != y.Length)
-                return false;
-
-            fixed (char* pX = x.Buffer)
-            fixed (char* pY = y.Buffer)
-            {
-                return Memory.Compare((byte*)pX + x.Offset * sizeof(char), (byte*)pY + y.Offset * sizeof(char), x.Length * sizeof(char)) == 0;
-            }
-
-        }
-
-        public unsafe int GetHashCode(StringSegment str)
-        {
-            fixed (char* p = str.Buffer)
-            {
-                //PERF: JIT will remove the corresponding line based on the target architecture using dead code removal.                                 
-                if (IntPtr.Size == 4)
-                    return (int)Hashing.XXHash32.CalculateInline(((byte*)p + str.Offset * sizeof(char)), str.Length * sizeof(char));
-                return (int)Hashing.XXHash64.CalculateInline(((byte*)p + str.Offset * sizeof(char)), (ulong)str.Length * sizeof(char));
-            }
-        }
-    }
-
+ 
     public struct StringSegment : IEquatable<StringSegment>
     {
         public readonly string Buffer;
@@ -243,13 +126,7 @@ namespace Sparrow
 
         public override unsafe int GetHashCode()
         {
-            fixed (char* p = Buffer)
-            {
-                //PERF: JIT will remove the corresponding line based on the target architecture using dead code removal.                                 
-                if (IntPtr.Size == 4)
-                    return (int)Hashing.XXHash32.CalculateInline((byte*)p + Offset * sizeof(char), Length * sizeof(char));
-                return (int)Hashing.XXHash64.CalculateInline((byte*)p + Offset * sizeof(char), (ulong)Length * sizeof(char));
-            }
+            return ToString().GetHashCode();
         }
 
         public unsafe bool Equals(string other)
