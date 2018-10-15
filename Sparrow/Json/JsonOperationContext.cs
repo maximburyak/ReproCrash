@@ -12,10 +12,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Sparrow.Json.Parsing;
 
-#if VALIDATE
-using Sparrow.Platform;
-#endif
-
 namespace Sparrow.Json
 {
     /// <summary>
@@ -75,21 +71,11 @@ namespace Sparrow.Json
             _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
             _jsonParserState = new JsonParserState();
             _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);
-
-#if MEM_GUARD_STACK
-            ElectricFencedMemory.IncrementConext();
-            ElectricFencedMemory.RegisterContextAllocation(this,Environment.StackTrace);
-#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public AllocatedMemoryData GetMemory(int requestedSize)
         {
-#if DEBUG || VALIDATE
-            if (requestedSize <= 0)
-                throw new ArgumentException(nameof(requestedSize));
-#endif
-
             var allocatedMemory = _arenaAllocator.Allocate(requestedSize);
             allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
@@ -99,10 +85,6 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public AllocatedMemoryData GetLongLivedMemory(int requestedSize)
         {
-#if DEBUG || VALIDATE
-            if (requestedSize <= 0)
-                throw new ArgumentException(nameof(requestedSize));
-#endif
             //we should use JsonOperationContext in single thread
             if (_arenaAllocatorForLongLivedValues == null)
             {
@@ -201,15 +183,6 @@ namespace Sparrow.Json
         {
             throw new ObjectDisposedException(nameof(JsonOperationContext));
         }
-
-        protected internal virtual void Renew()
-        {
-            if (_arenaAllocatorForLongLivedValues == null)
-            {
-                _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
-            }
-        }
-
         protected internal virtual unsafe void Reset(bool forceReleaseLongLivedAllocator = false)
         {
             if (_tempBuffer != null && _tempBuffer.Address != null)
@@ -264,13 +237,10 @@ namespace Sparrow.Json
 
         private void ThrowUseAfterFree(AllocatedMemoryData allocation)
         {
-#if MEM_GUARD_STACK || TRACK_ALLOCATED_MEMORY_DATA
-            throw new InvalidOperationException(
-                $"UseAfterFree detected! Attempt to return memory from previous generation, Reset has already been called and the memory reused! Allocated by: {allocation.AllocatedBy}. Thread name: {Thread.CurrentThread.Name}");
-#else
+
             throw new InvalidOperationException(
                 $"UseAfterFree detected! Attempt to return memory from previous generation, Reset has already been called and the memory reused! Thread name: {Thread.CurrentThread.Name}");
-#endif
+
         }
 
 

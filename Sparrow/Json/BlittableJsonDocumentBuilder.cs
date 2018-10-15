@@ -22,26 +22,11 @@ namespace Sparrow.Json
         private WriteToken _writeToken;
         private  string _debugTag;
 
-        private readonly ListCache<PropertyTag> _propertiesCache;
-        private readonly ListCache<int> _positionsCache;
-        private readonly ListCache<BlittableJsonToken> _tokensCache;
-
-        private class ListCache<T>
-        {
-            private readonly List<List<T>> _cache = new List<List<T>>();
-            private int _index = 0;          
-        }
-
-
         public BlittableJsonDocumentBuilder(JsonOperationContext context, JsonParserState state, IJsonParser reader)
         {
             _context = context;                                   
             _state = state;
-            _reader = reader;
-
-            _propertiesCache = new ListCache<PropertyTag>();
-            _positionsCache = new ListCache<int>();
-            _tokensCache = new ListCache<BlittableJsonToken>();           
+            _reader = reader;         
         }
 
         public BlittableJsonDocumentBuilder(
@@ -79,9 +64,6 @@ namespace Sparrow.Json
 
         public void Dispose()
         {
-         
-           // _writer.Dispose();
-          //  GlobalCache.Free(_cacheItem);
         }
 
         private bool ReadInternal<TWriteStrategy>() where TWriteStrategy : IWriteStrategy
@@ -257,12 +239,6 @@ namespace Sparrow.Json
             if (_continuationState.Count == 0)
                 return false; //nothing to do
 
-//            if (_mode == UsageMode.None)
-//            {
-//                Console.WriteLine("ERRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR");
-//                return ReadInternal<WriteNone>();
-//            }
-
             return ReadInternal<WriteFull>();
         }
 
@@ -342,23 +318,13 @@ namespace Sparrow.Json
                     _continuationState.Push(new BuildingState(ContinuationState.ReadArray));
                     return;
                 case JsonParserToken.Float:
-//                    if ((_mode & UsageMode.ValidateDouble) == UsageMode.ValidateDouble)
-//                        _reader.ValidateFloat();
-//
-//                  //  start = _writer.WriteValue(_state.StringBuffer, _state.StringSize);
-//
-//                    _state.CompressedSize = null;
-//                    _writeToken = new WriteToken(start, BlittableJsonToken.LazyNumber);
+
                     return;
                 case JsonParserToken.True:
                 case JsonParserToken.False:
-                   // start = _writer.WriteValue(current == JsonParserToken.True ? (byte)1 : (byte)0);
-                    //_writeToken = new WriteToken(start, BlittableJsonToken.Boolean);
+
                     return;
                 case JsonParserToken.Null:
-                    // nothing to do here, we handle that with the token
-                 //   start = _writer.WriteValue((byte)0);
-                    //_writeToken = new WriteToken(start, BlittableJsonToken.Null);
                     return;
             }
 

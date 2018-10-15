@@ -58,10 +58,6 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(string other)
         {
-#if DEBUG
-            if (IsDisposed)
-                ThrowAlreadyDisposed();
-#endif
 
             if (_string != null)
                 return string.Equals(_string, other, StringComparison.Ordinal);
@@ -85,10 +81,6 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Equals(LazyStringValue other)
         {
-#if DEBUG
-            if (IsDisposed)
-                ThrowAlreadyDisposed();
-#endif
 
             int size = Size;
             if (other.Size != size)
@@ -126,10 +118,6 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int Compare(byte* other, int otherSize)
         {
-#if DEBUG
-            if (IsDisposed)
-                ThrowAlreadyDisposed();
-#endif
             int size = Size;
             var result = Memory.CompareInline(Buffer, other, Math.Min(size, otherSize));
             return result == 0 ? size - otherSize : result;
@@ -140,10 +128,7 @@ namespace Sparrow.Json
         {
             if (self == null)
                 return null;
-#if DEBUG
-            if (self.IsDisposed)
-                self.ThrowAlreadyDisposed();
-#endif
+
             return self._string ??
                 (self._string = Encoding.UTF8.GetString(self._buffer, self._size));
         }
@@ -157,10 +142,6 @@ namespace Sparrow.Json
 
         public override bool Equals(object obj)
         {
-#if DEBUG
-            if (IsDisposed)
-                ThrowAlreadyDisposed();
-#endif
             if (ReferenceEquals(obj, null))
                 return false;
 
@@ -176,10 +157,7 @@ namespace Sparrow.Json
 
         public unsafe override int GetHashCode()
         {
-#if DEBUG
-            if (IsDisposed)
-                ThrowAlreadyDisposed();
-#endif
+
             return Encoding.UTF8.GetString(Buffer, Size).GetHashCode();
         }
 
