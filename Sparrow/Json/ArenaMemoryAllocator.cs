@@ -28,7 +28,7 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Return(AllocatedMemoryData allocation)
         {
-      //      Marshal.FreeHGlobal((IntPtr)allocation.Address);
+             Marshal.FreeHGlobal((IntPtr)allocation.Address);
         }
 
     }

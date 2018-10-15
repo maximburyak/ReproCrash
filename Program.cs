@@ -14,7 +14,6 @@ namespace Repro
         public static unsafe void Main()
         {
             Console.WriteLine("Starting...");
-            // byte[] filebytes1 = File.ReadAllBytes("/home/cesar/Sources/tmpcommand.txt");
 
             for (int ss = 0; ss < 1000; ss++)
             {                
@@ -26,13 +25,10 @@ namespace Repro
                     byte[] filebytes1 = Encoding.UTF8.GetBytes(readAllText);
                     for (int i = 0; i < 1; i++)
                     {
-                        // Console.Write(" " + i + "(" + Thread.CurrentThread.ManagedThreadId + ")");
-                        // Console.Out.Flush();
                         ParseFile(filebytes1);
-                    }
+                    }                           LCIDConversionAttribute
 
-                }
-                );
+                });
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);                
             }
             Console.WriteLine("Done");
