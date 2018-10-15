@@ -34,8 +34,6 @@ namespace Sparrow.Json
     public unsafe class AllocatedMemoryData
     {
         public int SizeInBytes;
-        public int ContextGeneration;
-
         public JsonOperationContext Parent;
         public byte* Address;
 

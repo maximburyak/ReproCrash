@@ -11,7 +11,6 @@ namespace Sparrow.Json
         where TWriter : struct
     {
         private readonly JsonOperationContext _context;
-        //private TWriter _unmanagedWriteBuffer;
         private AllocatedMemoryData _compressionBuffer;
         private AllocatedMemoryData _innerBuffer;
         private int _position;
@@ -96,11 +95,6 @@ namespace Sparrow.Json
                 v >>= 7;
             }
             buffer[count++] = (byte)(v);
-//
-//            if (count == 1)
-//            //    _unmanagedWriteBuffer.WriteByte(*buffer);
-//            else
-//                _unmanagedWriteBuffer.Write(buffer, count);
 
             return count;
         }
@@ -120,57 +114,31 @@ namespace Sparrow.Json
             }
             buffer[count++] = (byte)(v);
 
-//            if (count == 1)
-//                _unmanagedWriteBuffer.WriteByte(*buffer);
-//            else
-//                _unmanagedWriteBuffer.Write(buffer, count);
-
             return count;
         }
        
 
-        public unsafe int WriteValue(string str, out BlittableJsonToken token, UsageMode mode = UsageMode.None)
+        public unsafe int WriteValue(string str, out BlittableJsonToken token)
         {
-//            if (_intBuffer == null)
-//                _intBuffer = new FastList<int>();
-//
-//            var escapePositionsMaxSize = JsonParserState.FindEscapePositionsMaxSize(str);
-//            int size = Encodings.Utf8.GetMaxByteCount(str.Length) + escapePositionsMaxSize;
-//
-//            AllocatedMemoryData buffer = null;
-//            try
-//            {
-//                buffer = _context.GetMemory(size);
-//                fixed (char* pChars = str)
-//                {
-//                    var stringSize = Encodings.Utf8.GetBytes(pChars, str.Length, buffer.Address, size);
-//                    JsonParserState.FindEscapePositionsIn(_intBuffer, buffer.Address, stringSize, escapePositionsMaxSize);
-//                    return WriteValue(buffer.Address, stringSize, _intBuffer, out token, mode, null);
-//                }
-//            }
-//            finally
-//            {
-//                if(buffer != null)
-//                    _context.ReturnMemory(buffer);
-//            }
+
             token = BlittableJsonToken.String;
             return 1;
         }
 
         public int WriteValue(LazyStringValue str)
         {
-            return WriteValue(str, out _, UsageMode.None, null);
+            return WriteValue(str, out _, null);
         }
 
         public unsafe int WriteValue(LazyStringValue str, out BlittableJsonToken token,
-            UsageMode mode, int? initialCompressedSize)
+             int? initialCompressedSize)
         {
             token = BlittableJsonToken.String;
             return 1;
         }
 
 
-        public unsafe int WriteValue(byte* buffer, int size, out BlittableJsonToken token, UsageMode mode, int? initialCompressedSize)
+        public unsafe int WriteValue(byte* buffer, int size, out BlittableJsonToken token, int? initialCompressedSize)
         {
             int startPos = _position;
             token = BlittableJsonToken.String;
@@ -182,7 +150,7 @@ namespace Sparrow.Json
             int maxGoodCompressionSize = size - sizeof(int) * 2;
             if (maxGoodCompressionSize > 0)
             {
-                size = TryCompressValue(ref buffer, ref _position, size, ref token, mode, initialCompressedSize, maxGoodCompressionSize);
+                size = TryCompressValue(ref buffer, ref _position, size, ref token,  initialCompressedSize, maxGoodCompressionSize);
             }
 
             //_unmanagedWriteBuffer.Write(buffer, size);
@@ -192,7 +160,7 @@ namespace Sparrow.Json
             return startPos;
         }
 
-        public unsafe int WriteValue(byte* buffer, int size, List<int> escapePositions, out BlittableJsonToken token, UsageMode mode, int? initialCompressedSize)
+        public unsafe int WriteValue(byte* buffer, int size, List<int> escapePositions, out BlittableJsonToken token, int? initialCompressedSize)
         {
             int position = _position;
 
@@ -206,7 +174,7 @@ namespace Sparrow.Json
             int maxGoodCompressionSize = size - sizeof(int) * 2;
             if (maxGoodCompressionSize > 0)
             {
-                size = TryCompressValue(ref buffer, ref position, size, ref token, mode, initialCompressedSize, maxGoodCompressionSize);
+                size = TryCompressValue(ref buffer, ref position, size, ref token,  initialCompressedSize, maxGoodCompressionSize);
             }
 
             //_unmanagedWriteBuffer.Write(buffer, size);
@@ -302,7 +270,7 @@ namespace Sparrow.Json
             return startPos;
         }
 
-        public unsafe int WriteValue(byte* buffer, int size, int[] escapePositions, out BlittableJsonToken token, UsageMode mode, int? initialCompressedSize)
+        public unsafe int WriteValue(byte* buffer, int size, int[] escapePositions, out BlittableJsonToken token, int? initialCompressedSize)
         {
             var startPos = _position;
             token = BlittableJsonToken.String;
@@ -314,7 +282,7 @@ namespace Sparrow.Json
             int maxGoodCompressionSize = size - sizeof(int) * 2;
             if (maxGoodCompressionSize > 0)
             {
-                size = TryCompressValue(ref buffer, ref _position, size, ref token, mode, initialCompressedSize, maxGoodCompressionSize);
+                size = TryCompressValue(ref buffer, ref _position, size, ref token,  initialCompressedSize, maxGoodCompressionSize);
             }
 
             //_unmanagedWriteBuffer.Write(buffer, size);
@@ -339,7 +307,7 @@ namespace Sparrow.Json
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe int TryCompressValue(ref byte* buffer, ref int position, int size, ref BlittableJsonToken token, UsageMode mode, int? initialCompressedSize, int maxGoodCompressionSize)
+        private unsafe int TryCompressValue(ref byte* buffer, ref int position, int size, ref BlittableJsonToken token, int? initialCompressedSize, int maxGoodCompressionSize)
         {
                
             return size;

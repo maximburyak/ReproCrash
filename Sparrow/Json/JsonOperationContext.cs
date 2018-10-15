@@ -18,16 +18,9 @@ namespace Sparrow.Json
     /// Single threaded for contexts
     /// </summary>
     public class JsonOperationContext : IDisposable
-    {
-        private int _generation;
-        private readonly int _initialSize;
-        private readonly int _longLivedSize;
+    {        
         private readonly ArenaMemoryAllocator _arenaAllocator;
         private ArenaMemoryAllocator _arenaAllocatorForLongLivedValues;
-        private AllocatedMemoryData _tempBuffer;
-
-        private readonly Dictionary<string, LazyStringValue> _fieldNames = new Dictionary<string, LazyStringValue>();
-
 
         private int _numberOfAllocatedStringsValues;
         private readonly List<LazyStringValue> _allocateStringValues = new List<LazyStringValue>(256);
@@ -55,29 +48,23 @@ namespace Sparrow.Json
         private readonly JsonParserState _jsonParserState;
         private readonly BlittableJsonDocumentBuilder _documentBuilder;
 
-        public int Generation => _generation;
-
         public static JsonOperationContext ShortTermSingleUse()
         {
-            return new JsonOperationContext(4096, 1024);
+            return new JsonOperationContext();
         }
 
-        public JsonOperationContext(int initialSize, int longLivedSize)
-        {
-
-            _initialSize = initialSize;
-            _longLivedSize = longLivedSize;
+        public JsonOperationContext()
+        {            
             _arenaAllocator = new ArenaMemoryAllocator();
             _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
             _jsonParserState = new JsonParserState();
-            _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);
+            _documentBuilder = new BlittableJsonDocumentBuilder(_jsonParserState, null);
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public AllocatedMemoryData GetMemory(int requestedSize)
         {
             var allocatedMemory = _arenaAllocator.Allocate(requestedSize);
-            allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
             return allocatedMemory;
         }
@@ -96,7 +83,6 @@ namespace Sparrow.Json
             }
 
             var allocatedMemory = _arenaAllocatorForLongLivedValues.Allocate(requestedSize);
-            allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
             return allocatedMemory;
         }
@@ -119,22 +105,12 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public LazyStringValue GetLazyStringForFieldWithCaching(string field)
         {
-            EnsureNotDisposed();
-            if (_fieldNames.TryGetValue(field, out LazyStringValue value))
-            {
-                // PERF: This is usually the most common scenario, so actually being contiguous improves the behavior.
-                Debug.Assert(value.IsDisposed == false);
-                return value;
-            }
-
             return GetLazyStringForFieldWithCachingUnlikely(field);
         }
 
         private LazyStringValue GetLazyStringForFieldWithCachingUnlikely(string key)
         {
-            EnsureNotDisposed();
             LazyStringValue value = GetLazyString(key, longLived: true);
-            _fieldNames[key] = value;
 
             //sanity check, in case the 'value' is manually disposed outside of this function
             Debug.Assert(value.IsDisposed == false);
@@ -171,26 +147,10 @@ namespace Sparrow.Json
             }
         }            
 
-        public bool Disposed;
-        private void EnsureNotDisposed()
-        {
-            if (Disposed)
-                ThrowObjectDisposed();
-        }
-        
-
-        private void ThrowObjectDisposed()
-        {
-            throw new ObjectDisposedException(nameof(JsonOperationContext));
-        }
+        public bool Disposed;  
+             
         protected internal virtual unsafe void Reset(bool forceReleaseLongLivedAllocator = false)
         {
-            if (_tempBuffer != null && _tempBuffer.Address != null)
-            {
-                _arenaAllocator.Return(_tempBuffer);
-                _tempBuffer = null;
-            }
-
             _documentBuilder.Reset();
 
             // We don't reset _arenaAllocatorForLongLivedValues. It's used as a cache buffer for long lived strings like field names.
@@ -198,19 +158,10 @@ namespace Sparrow.Json
 
             var allocatorForLongLivedValues = _arenaAllocatorForLongLivedValues;
             if (allocatorForLongLivedValues != null || forceReleaseLongLivedAllocator)
-            {
-                foreach (var mem in _fieldNames.Values)
-                {
-                    _arenaAllocatorForLongLivedValues.Return(mem.AllocatedMemoryData);
-                    mem.AllocatedMemoryData = null;
-                    mem.Dispose();
-                }
-
+            {            
                 _arenaAllocatorForLongLivedValues = null;
-                _fieldNames.Clear();
             }
             _numberOfAllocatedStringsValues = 0;
-            _generation = _generation + 1;
 
             if (_pooledArrays != null )
             {
@@ -228,21 +179,8 @@ namespace Sparrow.Json
 
         public void ReturnMemory(AllocatedMemoryData allocation)
         {
-            EnsureNotDisposed();
-            if (_generation != allocation.ContextGeneration)
-                ThrowUseAfterFree(allocation);
-
             _arenaAllocator.Return(allocation);
         }
-
-        private void ThrowUseAfterFree(AllocatedMemoryData allocation)
-        {
-
-            throw new InvalidOperationException(
-                $"UseAfterFree detected! Attempt to return memory from previous generation, Reset has already been called and the memory reused! Thread name: {Thread.CurrentThread.Name}");
-
-        }
-
 
         private Dictionary<Type, (Action<Array> Releaser, List<Array> Array)> _pooledArrays = null;
 

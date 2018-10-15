@@ -13,47 +13,32 @@ namespace Sparrow.Json
 
         private readonly Stack<BuildingState> _continuationState = new Stack<BuildingState>();
 
-        private readonly JsonOperationContext _context;
-        private UsageMode _mode;
         private readonly IJsonParser _reader;
         private readonly JsonParserState _state;
-        private LazyStringValue _fakeFieldName;
 
         private WriteToken _writeToken;
-        private  string _debugTag;
 
-        public BlittableJsonDocumentBuilder(JsonOperationContext context, JsonParserState state, IJsonParser reader)
+        public BlittableJsonDocumentBuilder(JsonParserState state, IJsonParser reader)
         {
-            _context = context;                                   
             _state = state;
             _reader = reader;         
         }
 
-        public BlittableJsonDocumentBuilder(
-            JsonOperationContext context, 
-            UsageMode mode, string debugTag, 
-            IJsonParser reader, JsonParserState state) : this(context, state, reader)
+        public BlittableJsonDocumentBuilder(IJsonParser reader, JsonParserState state) : this(state, reader)
         {
-            Renew(debugTag, mode);
+            Renew();
         }
 
         public void Reset()
         {
-            _debugTag = null;
-            _mode = UsageMode.None;
             _continuationState.Clear();
             _writeToken = default(WriteToken);
         }
 
-        public void Renew(string debugTag, UsageMode mode)
+        public void Renew()
         {
             _writeToken = default(WriteToken);
-            _debugTag = debugTag;
-            _mode = mode;
-
-            _continuationState.Clear();          
-
-            _fakeFieldName = _context.GetLazyStringForFieldWithCaching(UnderscoreSegment);            
+            _continuationState.Clear();                      
         }
 
 
@@ -165,8 +150,7 @@ namespace Sparrow.Json
 
                         case ContinuationState.CompleteArray:
                             var arrayToken = BlittableJsonToken.StartArray;
-                            // var arrayInfoStart = _writer.WriteArrayMetadata(currentState.Positions, currentState.Types, ref arrayToken);
-                            // _writeToken = new WriteToken(arrayInfoStart, arrayToken);
+
                             currentState = continuationState.Pop();
                             continue;
 
@@ -179,7 +163,6 @@ namespace Sparrow.Json
 
                             if (state.CurrentTokenType == JsonParserToken.EndObject)
                             {
-                                // _writeToken = _writer.WriteObjectMetadata(currentState.Properties, currentState.FirstWrite, currentState.MaxPropertyId);
                                 if (continuationState.Count == 0)
                                     return true;
 
@@ -189,10 +172,7 @@ namespace Sparrow.Json
 
                             if (state.CurrentTokenType != JsonParserToken.String)
                                 goto ErrorExpectedProperty;
-
-                            //var property = CreateLazyStringValueFromParserState();
-                            //currentState.CurrentProperty = _context.CachedProperties.GetProperty(property);
-                            //currentState.MaxPropertyId = Math.Max(currentState.MaxPropertyId, currentState.CurrentProperty.PropertyId);
+                          
                             currentState.State = ContinuationState.ReadPropertyValue;
                             continue;
                         case ContinuationState.ReadPropertyValue:          
@@ -281,7 +261,7 @@ namespace Sparrow.Json
                 }
                 else // WriteFull
                 {
-                    if (_state.EscapePositions.Count == 0 && _state.CompressedSize == null && (_mode & UsageMode.CompressSmallStrings) == 0 && _state.StringSize < 128)
+                    if (_state.EscapePositions.Count == 0 && _state.CompressedSize == null  && _state.StringSize < 128)
                     {
                      //   start = _writer.WriteValue(_state.StringBuffer, _state.StringSize);
                         stringToken = BlittableJsonToken.String;
@@ -389,17 +369,7 @@ namespace Sparrow.Json
                 PropertyId = property;
                 Position = position;
             }
-        }
-
-        [Flags]
-        public enum UsageMode
-        {
-            None = 0,
-            ValidateDouble = 1,
-            CompressStrings = 2,
-            CompressSmallStrings = 4,
-            ToDisk = ValidateDouble | CompressStrings
-        }
+        }        
 
         public struct WriteToken
         {
@@ -415,7 +385,7 @@ namespace Sparrow.Json
 
         public override string ToString()
         {
-            return "Building json for " + _debugTag;
+            return "Building json";
         }    
     }
 }

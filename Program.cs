@@ -39,7 +39,7 @@ namespace Repro
         {
             MemoryStream stream = new MemoryStream(filebytes1,0,filebytes1.Length, true, true);            
             var state = new JsonParserState();
-            using(var ctx = new JsonOperationContext(1024* 32, 1024*128))
+            using(var ctx = new JsonOperationContext())
             using (var sssssssss = JsonOperationContext.ShortTermSingleUse())
             using (var parser = new UnmanagedJsonParser(sssssssss, state, "ourtest"))
             {
@@ -138,9 +138,7 @@ namespace Repro
 //                }
 //            }
 
-            using (var builder = new BlittableJsonDocumentBuilder(sssssssss,
-                BlittableJsonDocumentBuilder.UsageMode.ToDisk,
-                "users/1", parser, state))
+            using (var builder = new BlittableJsonDocumentBuilder(parser, state))
             {
                 builder.ReadNestedObject();
 
