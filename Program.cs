@@ -20,7 +20,7 @@ namespace Repro
                 Console.WriteLine("************ " + ss + " ***********");
                 Parallel.For(0, 20, a =>
                 {
-                    string readAllText = File.ReadAllText("/home/cesar/Sources/tmpcommand.txt");
+                    string readAllText = File.ReadAllText("tmpcommand.txt");
                     readAllText = readAllText.Replace("/", "_");
                     byte[] filebytes1 = Encoding.UTF8.GetBytes(readAllText);
                     for (int i = 0; i < 1; i++)
