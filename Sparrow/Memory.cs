@@ -6,18 +6,7 @@ using Sparrow.Platform.Posix;
 namespace Sparrow
 {
     public static unsafe class Memory
-    {
-        public const int CompareInlineVsCallThreshold = 256;
-
-        public static int Compare(byte* p1, byte* p2, int size)
-        {
-            return CompareInline(p1, p2, size);
-        }
-
-        public static int Compare(byte* p1, byte* p2, int size, out int position)
-        {
-            return CompareInline(p1, p2, size, out position);
-        }
+    {      
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static int CompareInline(void* p1, void* p2, int size)
@@ -71,46 +60,6 @@ namespace Sparrow
             }
 
             BulkCopy(dest, src, n);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Set(byte* dest, byte value, uint n)
-        {
-            Unsafe.InitBlock(dest, value, n);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Set(byte* dest, byte value, int n)
-        {
-            Unsafe.InitBlock(dest, value, (uint)n);
-        }
-
-        public static void Set(byte* dest, byte value, long n)
-        {
-            SetInline(dest, value, n);
-        }
-
-        /// <summary>
-        /// Set is optimized to handle copy operations where n is statistically small.       
-        /// </summary>
-        /// <remarks>This is a forced inline version, use with care.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void SetInline(byte* dest, byte value, long n)
-        {
-            if (n == 0)
-                goto Finish;
-
-            if (n < int.MaxValue)
-            {
-                Unsafe.InitBlock(dest, value, (uint)n);
-            }
-            else
-            {
-                Syscall.Set(dest, value, n);
-            }
-
-            Finish:
-            ;
         }
     }
 }

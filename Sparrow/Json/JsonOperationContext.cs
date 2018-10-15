@@ -24,67 +24,18 @@ namespace Sparrow.Json
     public class JsonOperationContext : IDisposable
     {
         private int _generation;
-        public const int InitialStreamSize = 4096;
-        private const int MaxInitialStreamSize = 16 * 1024 * 1024;
         private readonly int _initialSize;
         private readonly int _longLivedSize;
         private readonly ArenaMemoryAllocator _arenaAllocator;
         private ArenaMemoryAllocator _arenaAllocatorForLongLivedValues;
         private AllocatedMemoryData _tempBuffer;
-        private List<string> _normalNumbersStringBuffers = new List<string>(5);
-        private string _hugeNumbersBuffer;
 
         private readonly Dictionary<string, LazyStringValue> _fieldNames = new Dictionary<string, LazyStringValue>();
 
-        private struct PathCacheHolder
-        {
-            public PathCacheHolder(Dictionary<StringSegment, object> path, Dictionary<int, object> byIndex)
-            {
-                Path = path;
-                ByIndex = byIndex;
-            }
-
-            public readonly Dictionary<StringSegment, object> Path;
-            public readonly Dictionary<int, object> ByIndex;
-        }
-
-        private int _numberOfAllocatedPathCaches = -1;
-        private readonly PathCacheHolder[] _allocatePathCaches = new PathCacheHolder[512];
-        private Stack<MemoryStream> _cachedMemoryStreams = new Stack<MemoryStream>();
 
         private int _numberOfAllocatedStringsValues;
         private readonly List<LazyStringValue> _allocateStringValues = new List<LazyStringValue>(256);
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AcquirePathCache(out Dictionary<StringSegment, object> pathCache, out Dictionary<int, object> pathCacheByIndex)
-        {
-            // PERF: Avoids allocating gigabytes in FastDictionary instances on high traffic RW operations like indexing. 
-            if (_numberOfAllocatedPathCaches >= 0)
-            {
-                var cache = _allocatePathCaches[_numberOfAllocatedPathCaches--];
-                Debug.Assert(cache.Path != null);
-                Debug.Assert(cache.ByIndex != null);
-
-                pathCache = cache.Path;
-                pathCacheByIndex = cache.ByIndex;
-
-                return;
-            }
-
-            pathCache = new Dictionary<StringSegment, object>();
-            pathCacheByIndex = new Dictionary<int, object>();
-        }
-
-        public void ReleasePathCache(Dictionary<StringSegment, object> pathCache, Dictionary<int, object> pathCacheByIndex)
-        {
-            if (_numberOfAllocatedPathCaches < _allocatePathCaches.Length - 1 && pathCache.Count < 256)
-            {
-                pathCache.Clear();
-                pathCacheByIndex.Clear();
-
-                _allocatePathCaches[++_numberOfAllocatedPathCaches] = new PathCacheHolder(pathCache, pathCacheByIndex);
-            }
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe LazyStringValue AllocateStringValue(string str, byte* ptr, int size)
@@ -103,18 +54,7 @@ namespace Sparrow.Json
                 _numberOfAllocatedStringsValues++;
             }
             return allocateStringValue;
-        }
-       
-        internal unsafe class BufferSegment
-        {
-            public byte[] Array;
-            public int Offset;
-            public int Count;
-            public byte* Ptr;
-        }
-
-        
-        public CachedProperties CachedProperties;
+        }             
 
         private readonly JsonParserState _jsonParserState;
         private readonly BlittableJsonDocumentBuilder _documentBuilder;
@@ -133,7 +73,6 @@ namespace Sparrow.Json
             _longLivedSize = longLivedSize;
             _arenaAllocator = new ArenaMemoryAllocator();
             _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
-            CachedProperties = new CachedProperties(this);
             _jsonParserState = new JsonParserState();
             _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);
 
@@ -194,21 +133,6 @@ namespace Sparrow.Json
             _documentBuilder.Dispose();
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public LazyStringValue GetLazyStringForFieldWithCaching(StringSegment key)
-        {
-            EnsureNotDisposed();
-
-            var field = key.Value; // This will allocate if we are using a substring. 
-            if (_fieldNames.TryGetValue(field, out LazyStringValue value))
-            {
-                //sanity check, in case the 'value' is manually disposed outside of this function
-                Debug.Assert(value.IsDisposed == false);
-                return value;
-            }
-
-            return GetLazyStringForFieldWithCachingUnlikely(field);
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public LazyStringValue GetLazyStringForFieldWithCaching(string field)
@@ -224,7 +148,7 @@ namespace Sparrow.Json
             return GetLazyStringForFieldWithCachingUnlikely(field);
         }
 
-        private LazyStringValue GetLazyStringForFieldWithCachingUnlikely(StringSegment key)
+        private LazyStringValue GetLazyStringForFieldWithCachingUnlikely(string key)
         {
             EnsureNotDisposed();
             LazyStringValue value = GetLazyString(key, longLived: true);
@@ -235,18 +159,7 @@ namespace Sparrow.Json
             return value;
         }
 
-        public LazyStringValue GetLazyString(string field)
-        {
-            EnsureNotDisposed();
-
-            if (field == null)
-                return null;
-
-            return GetLazyString(field, longLived: false);
-        }
-
-        
-        private unsafe LazyStringValue GetLazyString(StringSegment field, bool longLived)
+        private unsafe LazyStringValue GetLazyString(string field, bool longLived)
         {
             var state = new JsonParserState();
             var maxByteCount = Encoding.UTF8.GetMaxByteCount(field.Length);
@@ -256,10 +169,10 @@ namespace Sparrow.Json
             int memorySize = maxByteCount + escapePositionsSize;
             var memory = longLived ? GetLongLivedMemory(memorySize) : GetMemory(memorySize);
 
-            fixed (char* pField = field.Buffer)
+            fixed (char* pField = field)
             {
                 var address = memory.Address;
-                var actualSize = Encoding.UTF8.GetBytes(pField + field.Offset, field.Length, address, memory.SizeInBytes);
+                var actualSize = Encoding.UTF8.GetBytes(pField, field.Length, address, memory.SizeInBytes);
 
                 state.FindEscapePositionsIn(address, actualSize, escapePositionsSize);
 
@@ -274,75 +187,7 @@ namespace Sparrow.Json
                 }
                 return result;
             }
-        }
-
-        private BlittableJsonReaderObject ParseToMemory(Stream stream, string debugTag, BlittableJsonDocumentBuilder.UsageMode mode)
-        {
-            var bytes = new byte[1024 * 64];
-            return ParseToMemory(stream, debugTag, mode, (bytes) );
-        }
-
-        public unsafe BlittableJsonReaderObject ParseToMemory(Stream stream, string debugTag,
-            BlittableJsonDocumentBuilder.UsageMode mode,
-            byte[] bytes)
-        {
-
-            EnsureNotDisposed();
-            int used =0, valid = 0;
-            _jsonParserState.Reset();
-            fixed(byte* buffer = bytes)
-            using (var parser = new UnmanagedJsonParser(this, _jsonParserState, debugTag))
-            using (var builder = new BlittableJsonDocumentBuilder(this, mode, debugTag, parser, _jsonParserState))
-            {
-                CachedProperties.NewDocument();
-                builder.ReadObjectDocument();
-                while (true)
-                {
-                    if (valid == used)
-                    {
-                        var read = stream.Read(bytes, 0, bytes.Length);
-                        EnsureNotDisposed();
-                        if (read == 0)
-                            throw new EndOfStreamException("Stream ended without reaching end of json content");
-                        valid = read;
-                        used = 0;
-                    }
-                    parser.SetBuffer(buffer, valid);
-                    var result = builder.Read();
-                    used += parser.BufferOffset;
-                    if (result)
-                        break;
-                }
-                builder.FinalizeDocument();
-
-                var reader = builder.CreateReader();
-                return reader;
-            }
-        }
-
-        public unsafe BlittableJsonReaderObject ParseBuffer(byte* buffer, int length, string debugTag,
-            BlittableJsonDocumentBuilder.UsageMode mode)
-        {
-
-            EnsureNotDisposed();
-
-            _jsonParserState.Reset();
-            using (var parser = new UnmanagedJsonParser(this, _jsonParserState, debugTag))
-            using (var builder = new BlittableJsonDocumentBuilder(this, mode, debugTag, parser, _jsonParserState))
-            {
-                CachedProperties.NewDocument();
-                builder.ReadObjectDocument();
-                parser.SetBuffer(buffer, length);
-
-                if (builder.Read() == false)
-                    throw new EndOfStreamException("Buffer ended without reaching end of json content");
-
-                builder.FinalizeDocument();
-
-                var reader = builder.CreateReader();
-                return reader;
-            }
-        }
+        }            
 
         public bool Disposed;
         private void EnsureNotDisposed()
@@ -351,19 +196,6 @@ namespace Sparrow.Json
                 ThrowObjectDisposed();
         }
         
-        private void DisposeIfNeeded(int generation, UnmanagedJsonParser parser, BlittableJsonDocumentBuilder builder)
-        {
-            // if the generation has changed, that means that we had reset the context
-            // this can happen if we were waiting on an async call for a while, got timed out / error / something
-            // and the context was reset before we got back from the async call
-            // since the full context was reset, there is no point in trying to dispose things, they were already 
-            // taken care of
-            if (generation == _generation)
-            {
-                parser?.Dispose();
-                builder?.Dispose();
-            }
-        }
 
         private void ThrowObjectDisposed()
         {
@@ -375,7 +207,6 @@ namespace Sparrow.Json
             if (_arenaAllocatorForLongLivedValues == null)
             {
                 _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
-                CachedProperties = new CachedProperties(this);
             }
         }
 
@@ -404,7 +235,6 @@ namespace Sparrow.Json
 
                 _arenaAllocatorForLongLivedValues = null;
                 _fieldNames.Clear();
-                CachedProperties = null; // need to release this so can be collected
             }
             _numberOfAllocatedStringsValues = 0;
             _generation = _generation + 1;
@@ -421,161 +251,6 @@ namespace Sparrow.Json
 
                 _pooledArrays = null;
             }
-        }
-
-        public void Write(Stream stream, BlittableJsonReaderObject json)
-        {
-            EnsureNotDisposed();
-           
-        }
-
-
-        public unsafe double ParseDouble(byte* ptr, int length)
-        {
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return double.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseDouble(byte* ptr, int length, out double val)
-        {
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-                        
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return double.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture,out val);            
-        }
-
-        public unsafe decimal ParseDecimal(byte* ptr, int length)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return decimal.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseDecimal(byte* ptr, int length, out decimal val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return decimal.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe float ParseFloat(byte* ptr, int length)
-        {
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return float.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseFloat(byte* ptr, int length, out float val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return float.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe long ParseLong(byte* ptr, int length)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return long.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseLong(byte* ptr, int length, out long val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return long.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe ulong ParseULong(byte* ptr, int length)
-        {
-            EnsureNotDisposed();
-            var stringBuffer= InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return ulong.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseULong(byte* ptr, int length, out ulong val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return ulong.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }       
-
-        private unsafe string InitializeStringBufferForNumberParsing(byte* ptr, int length)
-        {
-            var lengthsNextPowerOf2 = (length);
-
-            var actualPowerOf2 = (int)Math.Pow(lengthsNextPowerOf2, 0.5);
-            string stringBuffer;
-            if (actualPowerOf2 <= _normalNumbersStringBuffers.Count)
-            {
-                stringBuffer = _normalNumbersStringBuffers[actualPowerOf2 - 1];
-
-                if (stringBuffer == null)
-                {
-                    stringBuffer = _normalNumbersStringBuffers[actualPowerOf2 - 1] = new string(' ', lengthsNextPowerOf2);
-                }
-            }
-            else
-            {
-                stringBuffer = _hugeNumbersBuffer;
-                if (_hugeNumbersBuffer == null || length > _hugeNumbersBuffer.Length)
-                    stringBuffer = _hugeNumbersBuffer = new string(' ', length);
-            }
-            // we should support any length of LazyNumber, therefore, we do not validate it's length
-            
-            
-            // here we assume a clear char <- -> byte conversion, we only support
-            // utf8, and those cleanly transfer
-            fixed (char* pChars = stringBuffer)
-            {
-                int i = 0;
-
-                for (; i < length; i++)
-                {
-                    pChars[i] = (char)ptr[i];
-                }
-                for (; i < stringBuffer.Length; i++)
-                {
-                    pChars[i] = ' ';
-                }
-            }
-
-            return stringBuffer;
-        }
-
-        public MemoryStream CheckoutMemoryStream()
-        {
-            EnsureNotDisposed();
-            if (_cachedMemoryStreams.Count == 0)
-            {
-                return new MemoryStream();
-            }
-
-            return _cachedMemoryStreams.Pop();
-        }
-
-        public void ReturnMemoryStream(MemoryStream stream)
-        {
-            EnsureNotDisposed();
-            stream.SetLength(0);
-            _cachedMemoryStreams.Push(stream);
         }
 
         public void ReturnMemory(AllocatedMemoryData allocation)

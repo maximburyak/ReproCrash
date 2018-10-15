@@ -142,7 +142,6 @@ namespace Repro
                 BlittableJsonDocumentBuilder.UsageMode.ToDisk,
                 "users/1", parser, state))
             {
-                sssssssss.CachedProperties = new CachedProperties(JsonOperationContext.ShortTermSingleUse());
                 builder.ReadNestedObject();
 
                 while (true)

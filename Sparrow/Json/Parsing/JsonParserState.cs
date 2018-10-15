@@ -31,22 +31,7 @@ namespace Sparrow.Json.Parsing
                 v >>= 7;
             }
             *dest++ = (byte)(v);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int VariableSizeIntSize(int value)
-        {
-            int count = 0;
-            // assume that we don't use negative values very often
-            var v = (uint)value;
-            while (v >= 0x80)
-            {
-                v >>= 7;
-                count++;
-            }
-            count++;
-            return count;
-        }
+        }     
 
         public static int FindEscapePositionsMaxSize(string str)
         {
@@ -124,18 +109,6 @@ namespace Sparrow.Json.Parsing
                 WriteVariableSizeInt(ref buffer, escapePositions[i]);
 
             return (int)(buffer - originalBuffer);
-        }
-
-        public void Reset()
-        {
-        
-            StringBuffer = null;
-            StringSize = 0;
-            CompressedSize = null;
-            Long = 0;
-            CurrentTokenType = JsonParserToken.None;
-            Continuation = JsonParserTokenContinuation.None;
-            EscapePositions.Clear();
         }
     }
 }

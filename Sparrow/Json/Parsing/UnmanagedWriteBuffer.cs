@@ -160,21 +160,10 @@ namespace Sparrow.Json.Parsing
         }
 
 
-        private void AllocateNextSegment(int required, bool allowGrowth)
-        {
-            throw new NotSupportedException();
-        }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void WriteByte(byte data)
         {
             throw new NotSupportedException();
-        }
-
-        public int CopyTo(byte* pointer)
-        {
-            throw new NotSupportedException();
-
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

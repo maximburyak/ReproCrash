@@ -9,7 +9,7 @@ namespace Sparrow.Json
     public sealed class BlittableJsonDocumentBuilder : IDisposable
     {
 
-        private static readonly StringSegment UnderscoreSegment = new StringSegment("_");
+        private static readonly string UnderscoreSegment = "_";
 
         private readonly Stack<BuildingState> _continuationState = new Stack<BuildingState>();
 
@@ -29,30 +29,7 @@ namespace Sparrow.Json
         private class ListCache<T>
         {
             private readonly List<List<T>> _cache = new List<List<T>>();
-            private int _index = 0;
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public List<T> Allocate()
-            {
-                if (_index != _cache.Count)
-                    return _cache[_index++];
-
-                var n = new List<T>();
-                _cache.Add(n);
-                _index++;
-                return n;
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Reset()
-            {
-                for (var i = 0; i < _index; i++)
-                {
-                    var t = _cache[i];
-                    t.Clear();
-                }
-                _index = 0;
-            }
+            private int _index = 0;          
         }
 
 
@@ -71,11 +48,6 @@ namespace Sparrow.Json
             JsonOperationContext context, 
             UsageMode mode, string debugTag, 
             IJsonParser reader, JsonParserState state) : this(context, state, reader)
-        {
-            Renew(debugTag, mode);
-        }
-
-        public BlittableJsonDocumentBuilder(JsonOperationContext context, JsonParserState state, UsageMode mode, string debugTag, IJsonParser reader) : this(context, state, reader)
         {
             Renew(debugTag, mode);
         }
@@ -99,23 +71,11 @@ namespace Sparrow.Json
             _fakeFieldName = _context.GetLazyStringForFieldWithCaching(UnderscoreSegment);            
         }
 
-        public void ReadArrayDocument()
-        {
-            _continuationState.Push(new BuildingState(ContinuationState.ReadArrayDocument));
-        }
-
-        public void ReadObjectDocument()
-        {
-            _continuationState.Push(new BuildingState(ContinuationState.ReadObjectDocument));
-        }
 
         public void ReadNestedObject()
         {
             _continuationState.Push(new BuildingState(ContinuationState.ReadObject));
         }
-
-        public int SizeInBytes => 0;
-
 
         public void Dispose()
         {
@@ -160,15 +120,7 @@ namespace Sparrow.Json
                                 return false;
                             }
 
-//                            var fakeProperty = _context.CachedProperties.GetProperty(_fakeFieldName);
-//                            currentState.CurrentProperty = fakeProperty;
-//                            currentState.MaxPropertyId = fakeProperty.PropertyId;
-                            //currentState.FirstWrite = _writer.Position;
-                            currentState.Properties = new List<PropertyTag>(); // _propertiesCache.Allocate());
-//                            currentState.Properties.Add(new PropertyTag
-//                            {
-////                                Property = new 
-//                            });
+                            currentState.Properties = new List<PropertyTag>(); 
                             currentState.State = ContinuationState.CompleteDocumentArray;
                             continuationState.Push(currentState);
                             currentState = new BuildingState(ContinuationState.ReadArray);
@@ -177,20 +129,18 @@ namespace Sparrow.Json
                         case ContinuationState.CompleteDocumentArray:
                             currentState.Properties[0] = new PropertyTag(
                                 type: (byte)_writeToken.WrittenToken,
-                                property: currentState.Properties[0].Property,
+                                property: currentState.Properties[0].PropertyId,
                                 position: _writeToken.ValuePos
                             );
 
                             // Register property position, name id (PropertyId) and type (object type and metadata)
-                            // _writeToken = _writer.WriteObjectMetadata(currentState.Properties, currentState.FirstWrite, currentState.MaxPropertyId);
                             return true;
 
                         case ContinuationState.ReadObject:
                             if (state.CurrentTokenType == JsonParserToken.StartObject)
                             {
                                 currentState.State = ContinuationState.ReadPropertyName;
-                                currentState.Properties = new List<PropertyTag>(); // _propertiesCache.Allocate());
-                                //   currentState.FirstWrite = _writer.Position;
+                                currentState.Properties = new List<PropertyTag>(); 
                                 continue;
                             }
 
@@ -199,8 +149,8 @@ namespace Sparrow.Json
                         case ContinuationState.ReadArray:
                             if (state.CurrentTokenType == JsonParserToken.StartArray)
                             {
-                                currentState.Types = new List<BlittableJsonToken>(); //_tokensCache.Allocate();
-                                currentState.Positions = new List<int>(); // _positionsCache.Allocate());
+                                currentState.Types = new List<BlittableJsonToken>();
+                                currentState.Positions = new List<int>(); 
                                 currentState.State = ContinuationState.ReadArrayValue;
                                 continue;
                             }
@@ -279,7 +229,7 @@ namespace Sparrow.Json
                             currentState.Properties.Add(new PropertyTag(
                                 position: _writeToken.ValuePos,
                                 type: (byte)_writeToken.WrittenToken,
-                                property: currentState.CurrentProperty));
+                                property: currentState.CurrentPropertyId));
 
                             currentState.State = ContinuationState.ReadPropertyName;
                             continue;
@@ -441,7 +391,7 @@ namespace Sparrow.Json
         {
             public ContinuationState State;
             public int MaxPropertyId;
-            public CachedProperties.PropertyName CurrentProperty;
+            public int? CurrentPropertyId;
             public List<PropertyTag> Properties;
             public List<BlittableJsonToken> Types;
             public List<int> Positions;
@@ -451,7 +401,7 @@ namespace Sparrow.Json
             {
                 State = state;
                 MaxPropertyId = 0;
-                CurrentProperty = null;
+                CurrentPropertyId = null;
                 Properties = null;
                 Types = null;
                 Positions = null;
@@ -464,17 +414,13 @@ namespace Sparrow.Json
         {
             public int Position;
 
-            public override string ToString()
-            {
-                return $"{nameof(Position)}: {Position}, {nameof(Property)}: {Property.Comparer} {Property.PropertyId}, {nameof(Type)}: {(BlittableJsonToken)Type}";
-            }
-            public CachedProperties.PropertyName Property;
+            public int? PropertyId;
             public byte Type;
 
-            public PropertyTag(byte type, CachedProperties.PropertyName property, int position)
+            public PropertyTag(byte type, int? property, int position)
             {
                 Type = type;
-                Property = property;
+                PropertyId = property;
                 Position = position;
             }
         }
@@ -499,45 +445,11 @@ namespace Sparrow.Json
                 ValuePos = position;
                 WrittenToken = token;
             }
-        }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe LazyStringValue CreateLazyStringValueFromParserState()
-        {
-            // var lazyStringValueFromParserState = _context.AllocateStringValue(null, _state.StringBuffer, _state.StringSize);
-            var lazyStringValueFromParserState = new LazyStringValue(null, _state.StringBuffer, _state.StringSize, _context);
-
-            // Console.WriteLine(lazyStringValueFromParserState.ToString());
-
-            if (_state.EscapePositions.Count <= 0)
-                return lazyStringValueFromParserState;
-
-            lazyStringValueFromParserState.EscapePositions = _state.EscapePositions.ToArray();
-            return lazyStringValueFromParserState;
-        }
-
-        public void FinalizeDocument()
-        {
-            var documentToken = _writeToken.WrittenToken;
-            var rootOffset = _writeToken.ValuePos;
-
-           // _writer.WriteDocumentMetadata(rootOffset, documentToken);
-        }
-
-        public BlittableJsonReaderObject CreateReader()
-        {
-            return null;//_writer.CreateReader();
-        }
-
+        }   
 
         public override string ToString()
         {
             return "Building json for " + _debugTag;
-        }
-
-        public bool NeedResetPropertiesCache()
-        {            
-            return _context.CachedProperties.PropertiesDiscovered > CachedProperties.CachedPropertiesSize;
-        }
+        }    
     }
 }
