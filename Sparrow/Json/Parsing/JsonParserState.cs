@@ -110,17 +110,5 @@ namespace Sparrow.Json.Parsing
 
             return (int)(buffer - originalBuffer);
         }
-
-        public void Reset()
-        {
-        
-            StringBuffer = null;
-            StringSize = 0;
-            CompressedSize = null;
-            Long = 0;
-            CurrentTokenType = JsonParserToken.None;
-            Continuation = JsonParserTokenContinuation.None;
-            EscapePositions.Clear();
-        }
     }
 }

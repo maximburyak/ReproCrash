@@ -27,9 +27,7 @@ namespace Sparrow.Json
         private int _generation;                        
         private readonly ArenaMemoryAllocator _arenaAllocator;
         private ArenaMemoryAllocator _arenaAllocatorForLongLivedValues;
-        private AllocatedMemoryData _tempBuffer;
-        private List<string> _normalNumbersStringBuffers = new List<string>(5);
-        private string _hugeNumbersBuffer;
+        private AllocatedMemoryData _tempBuffer;        
         private readonly Dictionary<string, LazyStringValue> _fieldNames = new Dictionary<string, LazyStringValue>();
         private int _numberOfAllocatedStringsValues;
         private readonly List<LazyStringValue> _allocateStringValues = new List<LazyStringValue>(256);
@@ -90,7 +88,6 @@ namespace Sparrow.Json
         }             
 
         private Stack<ManagedPinnedBuffer> _managedBuffers;
-        public CachedProperties CachedProperties;
         private readonly JsonParserState _jsonParserState;
         private readonly BlittableJsonDocumentBuilder _documentBuilder;
         public int Generation => _generation;
@@ -122,8 +119,7 @@ namespace Sparrow.Json
             });
                         
             _arenaAllocator = new ArenaMemoryAllocator();
-            _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
-            CachedProperties = new CachedProperties(this);
+            _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();            
             _jsonParserState = new JsonParserState();
             _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);            
         }
@@ -326,7 +322,6 @@ namespace Sparrow.Json
                 allocatorForLongLivedValues.Dispose();
 
                 _fieldNames.Clear();
-                CachedProperties = null; // need to release this so can be collected
             }            
             _numberOfAllocatedStringsValues = 0;
             _generation = _generation + 1;
@@ -343,110 +338,6 @@ namespace Sparrow.Json
 
                 _pooledArrays = null;
             }
-        }
-
-
-        public unsafe double ParseDouble(byte* ptr, int length)
-        {
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return double.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseDouble(byte* ptr, int length, out double val)
-        {
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-                        
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return double.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture,out val);            
-        }
-
-        public unsafe decimal ParseDecimal(byte* ptr, int length)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return decimal.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseDecimal(byte* ptr, int length, out decimal val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return decimal.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe float ParseFloat(byte* ptr, int length)
-        {
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return float.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
-        public unsafe bool TryParseLong(byte* ptr, int length, out long val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return long.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe bool TryParseULong(byte* ptr, int length, out ulong val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return ulong.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }       
-
-        private unsafe string InitializeStringBufferForNumberParsing(byte* ptr, int length)
-        {
-            var lengthsNextPowerOf2 = (length);
-
-            var actualPowerOf2 = (int)Math.Pow(lengthsNextPowerOf2, 0.5);
-            string stringBuffer;
-            if (actualPowerOf2 <= _normalNumbersStringBuffers.Count)
-            {
-                stringBuffer = _normalNumbersStringBuffers[actualPowerOf2 - 1];
-
-                if (stringBuffer == null)
-                {
-                    stringBuffer = _normalNumbersStringBuffers[actualPowerOf2 - 1] = new string(' ', lengthsNextPowerOf2);
-                }
-            }
-            else
-            {
-                stringBuffer = _hugeNumbersBuffer;
-                if (_hugeNumbersBuffer == null || length > _hugeNumbersBuffer.Length)
-                    stringBuffer = _hugeNumbersBuffer = new string(' ', length);
-            }
-            // we should support any length of LazyNumber, therefore, we do not validate it's length
-            
-            
-            // here we assume a clear char <- -> byte conversion, we only support
-            // utf8, and those cleanly transfer
-            fixed (char* pChars = stringBuffer)
-            {
-                int i = 0;
-
-                for (; i < length; i++)
-                {
-                    pChars[i] = (char)ptr[i];
-                }
-                for (; i < stringBuffer.Length; i++)
-                {
-                    pChars[i] = ' ';
-                }
-            }
-
-            return stringBuffer;
         }
 
         public bool GrowAllocation(AllocatedMemoryData allocation, int sizeIncrease)

@@ -11,11 +11,12 @@ using Sparrow.Threading;
 namespace Repro
 {
     class Program
-    {
+    {        
         public static unsafe void Main()
         {
             Console.WriteLine("Starting...");            
-
+            
+            var random = new Random();
             for (int ss = 0; ss < 100; ss++)
             {                
                 Console.WriteLine("************ " + ss + " ***********");
@@ -27,10 +28,10 @@ namespace Repro
                     for (int i = 0; i < 1; i++)
                     {                        
                         ParseFile(filebytes1);
+                        GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);                
                     }
-                }
-                );
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);                
+                });
+                
             }
             Console.WriteLine("Done");
 
@@ -127,8 +128,7 @@ namespace Repro
             using (var builder = new BlittableJsonDocumentBuilder(sssssssss,
                 BlittableJsonDocumentBuilder.UsageMode.ToDisk,
                 "users/1", parser, state))
-            {
-                sssssssss.CachedProperties = new CachedProperties(JsonOperationContext.ShortTermSingleUse());
+            {                
                 builder.ReadNestedObject();
 
                 while (true)
@@ -168,8 +168,7 @@ namespace Repro
             // the stream will stay open even after the cancellation until the entire server will be disposed.
 
             const int size = 8 * 1024 * 1024;
-            var arr = new byte[size];
-            
+            var arr = new byte[size];            
             
             // var read = stream.Read(buffer.Buffer.Array.Buffer.Offset.Buffer.Count); // .WithCancellation(token);
             var read = stream.Read(arr, 0, size); // .WithCancellation(token);
@@ -183,11 +182,7 @@ namespace Repro
                 *(pArr + i) = arr[i];
             }
             
-            
-            // File.WriteAllBytes("/tmp/aaa" + Guid.NewGuid(), arr);            
-            // parser.SetBuffer(buffer, 0, read);
-            parser.SetBuffer(pArr, read);
-                        
+            parser.SetBuffer(pArr, read);                        
         }
 
     }

@@ -95,104 +95,6 @@ namespace Sparrow.Json
         {
         }
 
-        public static void CleanPropertyArrayOffset()
-        {
-            _propertyArrayOffset = null;
-            _intBuffer?.Clear();
-            _intBuffer = null;
-        }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int WritePropertyNames(int rootOffset)
-        {
-            var cachedProperties = _context.CachedProperties;
-            int propertiesDiscovered = cachedProperties.PropertiesDiscovered;
-
-            // Write the property names and register their positions
-            if (_propertyArrayOffset == null || _propertyArrayOffset.Length < propertiesDiscovered)
-            {
-                _propertyArrayOffset = new int[propertiesDiscovered];
-            }
-
-            unsafe
-            {
-                for (var index = 0; index < propertiesDiscovered; index++)
-                {
-                    var str = _context.GetLazyStringForFieldWithCaching(cachedProperties.GetProperty(index));
-                    if (str.EscapePositions == null || str.EscapePositions.Length == 0)
-                    {
-                        _propertyArrayOffset[index] = WriteValue(str.Buffer, str.Size);
-                        continue;
-                    }
-                        
-                    _propertyArrayOffset[index] = WriteValue(str.Buffer, str.Size, str.EscapePositions);
-                }
-            }
-
-            // Register the position of the properties offsets start
-            var propertiesStart = _position;
-
-            // Find the minimal space to store the offsets (byte,short,int) and raise the appropriate flag in the properties metadata
-            BlittableJsonToken propertiesSizeMetadata = 0;
-            var propertyNamesOffset = _position - rootOffset;
-            var propertyArrayOffsetValueByteSize = SetOffsetSizeFlag(ref propertiesSizeMetadata, propertyNamesOffset);
-
-            WriteNumber((int)propertiesSizeMetadata, sizeof(byte));
-
-            // Write property names offsets
-            // PERF: Using for to avoid the cost of the enumerator.
-            for (int i = 0; i < propertiesDiscovered; i++)
-            {
-                int offset = _propertyArrayOffset[i];
-                WriteNumber(propertiesStart - offset, propertyArrayOffsetValueByteSize);
-            }
-
-            return propertiesStart;
-        }
-
-        public void WriteDocumentMetadata(int rootOffset, BlittableJsonToken documentToken)
-        {
-            var propertiesStart = WritePropertyNames(rootOffset);
-
-            WriteVariableSizeIntInReverse(rootOffset);
-            WriteVariableSizeIntInReverse(propertiesStart);
-            WriteNumber((int)documentToken, sizeof(byte));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private static int SetOffsetSizeFlag(ref BlittableJsonToken objectToken, long distanceFromFirstProperty)
-        {
-            if (distanceFromFirstProperty <= byte.MaxValue)
-            {                
-                objectToken |= BlittableJsonToken.OffsetSizeByte;
-                return sizeof(byte);
-            }
-
-            if (distanceFromFirstProperty <= ushort.MaxValue)
-            {
-                objectToken |= BlittableJsonToken.OffsetSizeShort;
-                return sizeof(short);
-            }
-
-            objectToken |= BlittableJsonToken.OffsetSizeInt;
-            return sizeof(int);
-        }
-
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void WriteNumber(int value, int sizeOfValue)
-        {
-            // PERF: Instead of threw add this as a debug thing. We cannot afford this method not getting inlined.
-            Debug.Assert(sizeOfValue == sizeof(byte) || sizeOfValue == sizeof(short) || sizeOfValue == sizeof(int), $"Unsupported size {sizeOfValue}");
-
-            // PERF: With the current JIT at 12 of January of 2017 the switch statement dont get inlined.
-            //_unmanagedWriteBuffer.WriteByte((byte)value);
-            if (sizeOfValue == sizeof(byte))
-                return;
-
-            if (sizeOfValue == sizeof(ushort))
-                return;
-
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe int WriteVariableSizeLong(long value)
@@ -230,38 +132,7 @@ namespace Sparrow.Json
             buffer[count++] = (byte)(v);
             return count;
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe int WriteVariableSizeIntInReverse(int value)
-        {
-            // assume that we don't use negative values very often
-            var buffer = _innerBuffer.Address;
-            var count = 0;
-            var v = (uint)value;
-            while (v >= 0x80)
-            {
-                buffer[count++] = (byte)(v | 0x80);
-                v >>= 7;
-            }
-            buffer[count++] = (byte)(v);
-
-            if (count == 1)
-            {
-             //   _unmanagedWriteBuffer.WriteByte(*buffer);
-            }
-            else
-            {
-                for (int i = count - 1; i >= count / 2; i--)
-                {
-                    var tmp = buffer[i];
-                    buffer[i] = buffer[count - 1 - i];
-                    buffer[count - 1 - i] = tmp;
-                }
-              //  _unmanagedWriteBuffer.Write(buffer, count);
-            }
-
-            return count;
-        }
+    
 
         public unsafe int WriteValue(string str, out BlittableJsonToken token, UsageMode mode = UsageMode.None)
         {

@@ -1,361 +1,334 @@
-﻿using System;
-using System.Linq;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Runtime.CompilerServices;
+﻿// using System;
+// using System.Linq;
+// using System.Collections.Generic;
+// using System.Diagnostics;
+// using System.Runtime.CompilerServices;
 
-namespace Sparrow.Json
-{
-    /// <summary>
-    /// This class allows us to cache the properties from multiple documents
-    /// That way, we don't need to recompute the sort order.
-    /// 
-    /// However, because different documents may have different fields, we're tracking
-    /// which properties we have seen and which are new. If the order in which we read the 
-    /// properties doesn't match the cached version, we'll clear the cache up to the point the
-    /// properties match. 
-    /// 
-    /// This is done so we'll not write properties that don't belong to that document, but to 
-    /// previous documents handled in the same batch
-    /// </summary>
-    public class CachedProperties
-    {
-        private readonly JsonOperationContext _context;
-        private int _propertyNameCounter;
+// namespace Sparrow.Json
+// {
+//     /// <summary>
+//     /// This class allows us to cache the properties from multiple documents
+//     /// That way, we don't need to recompute the sort order.
+//     /// 
+//     /// However, because different documents may have different fields, we're tracking
+//     /// which properties we have seen and which are new. If the order in which we read the 
+//     /// properties doesn't match the cached version, we'll clear the cache up to the point the
+//     /// properties match. 
+//     /// 
+//     /// This is done so we'll not write properties that don't belong to that document, but to 
+//     /// previous documents handled in the same batch
+//     /// </summary>
+//     public class CachedProperties
+//     {
+//         private readonly JsonOperationContext _context;
+//         private int _propertyNameCounter;
 
-        private Sorter<BlittableJsonDocumentBuilder.PropertyTag, PropertySorter> _sorter;
+//         public sealed class PropertyName : IComparable<PropertyName>
+//         {
+//             public readonly int HashCode;
 
+//             public LazyStringValue Comparer;
+//             public int GlobalSortOrder;
+//             public int PropertyId;            
 
-        private struct PropertySorter : IComparer<BlittableJsonDocumentBuilder.PropertyTag>
-        {
-            private readonly CachedProperties properties;
+//             public PropertyName(int hash)
+//             {
+//                 HashCode = hash;
+//             }
 
-            public PropertySorter(CachedProperties props)
-            {
-                properties = props;
-            }
+//             public int CompareTo(PropertyName other)
+//             {
+//                 return Comparer.CompareTo(other.Comparer);
+//             }
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public int Compare(BlittableJsonDocumentBuilder.PropertyTag x, BlittableJsonDocumentBuilder.PropertyTag y)
-            {
-                var compare = x.Property.GlobalSortOrder - y.Property.GlobalSortOrder;
-                if (compare == 0)
-                {
-                    properties._hasDuplicates = true;
-                    return y.Position - x.Position;
-                }
-                return compare;
-            }
-        }
+//             public override string ToString()
+//             {
+//                 return $"Value: {Comparer}, GlobalSortOrder: {GlobalSortOrder}, PropertyId: {PropertyId}";
+//             }
 
-        public sealed class PropertyName : IComparable<PropertyName>
-        {
-            public readonly int HashCode;
+//             [MethodImpl(MethodImplOptions.AggressiveInlining)]
+//             public bool Equals(PropertyName other)
+//             {
+//                 if (ReferenceEquals(null, other)) return false;
+//                 if (ReferenceEquals(this, other)) return true;
+//                 return HashCode == other.HashCode;
+//             }                    
 
-            public LazyStringValue Comparer;
-            public int GlobalSortOrder;
-            public int PropertyId;            
+//             public override bool Equals(object obj)
+//             {
+//                 if (ReferenceEquals(null, obj)) return false;
+//                 if (ReferenceEquals(this, obj)) return true;
+//                 var a = obj as PropertyName;
+//                 return a != null && HashCode == a.HashCode;
+//             }
 
-            public PropertyName(int hash)
-            {
-                HashCode = hash;
-            }
+//             public override int GetHashCode()
+//             {
+//                 return HashCode;
+//             }
+//         }
 
-            public int CompareTo(PropertyName other)
-            {
-                return Comparer.CompareTo(other.Comparer);
-            }
+//         private class PropertyPosition
+//         {
+//             public PropertyName Property;
+//             public int SortedPosition;
+//             public BlittableJsonDocumentBuilder.PropertyTag Tmp;
+//         }
 
-            public override string ToString()
-            {
-                return $"Value: {Comparer}, GlobalSortOrder: {GlobalSortOrder}, PropertyId: {PropertyId}";
-            }
+//         private class CachedSort
+//         {
+//             public readonly List<PropertyPosition> Sorting = new List<PropertyPosition>();
+//             public int FinalCount;
 
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public bool Equals(PropertyName other)
-            {
-                if (ReferenceEquals(null, other)) return false;
-                if (ReferenceEquals(this, other)) return true;
-                return HashCode == other.HashCode;
-            }                    
+//             public override string ToString()
+//             {
+//                 return string.Join(", ", Sorting.Select(x => x.Property.Comparer));
+//             }
+//         }
 
-            public override bool Equals(object obj)
-            {
-                if (ReferenceEquals(null, obj)) return false;
-                if (ReferenceEquals(this, obj)) return true;
-                var a = obj as PropertyName;
-                return a != null && HashCode == a.HashCode;
-            }
+//         private const int CachedSortsSize = 512;        
 
-            public override int GetHashCode()
-            {
-                return HashCode;
-            }
-        }
+//         private readonly CachedSort[] _cachedSorts = new CachedSort[CachedSortsSize]; // size is fixed and used in GetPropertiesHashedIndex
 
-        private class PropertyPosition
-        {
-            public PropertyName Property;
-            public int SortedPosition;
-            public BlittableJsonDocumentBuilder.PropertyTag Tmp;
-        }
+//         private readonly List<PropertyName> _docPropNames = new List<PropertyName>();
+//         private readonly SortedDictionary<PropertyName, object> _propertiesSortOrder = new SortedDictionary<PropertyName, object>();
+//         private readonly Dictionary<LazyStringValue, PropertyName> _propertyNameToId = new Dictionary<LazyStringValue, PropertyName>();
+//         private bool _propertiesNeedSorting;
 
-        private class CachedSort
-        {
-            public readonly List<PropertyPosition> Sorting = new List<PropertyPosition>();
-            public int FinalCount;
+//         public int PropertiesDiscovered;
 
-            public override string ToString()
-            {
-                return string.Join(", ", Sorting.Select(x => x.Property.Comparer));
-            }
-        }
+//         public CachedProperties(JsonOperationContext context)
+//         {
+//             _context = context;
+//         }
 
-        private const int CachedSortsSize = 512;
-        public static int CachedPropertiesSize = 512;
+//         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+//         public PropertyName GetProperty(LazyStringValue propName)
+//         {
+//             PropertyName prop;
+//             if (_propertyNameToId.TryGetValue(propName, out prop))
+//             {
+//                 // PERF: This is the most common scenario, we need it to come first. 
+//                 if (prop.PropertyId < PropertiesDiscovered)
+//                     return prop;
 
-        private readonly CachedSort[] _cachedSorts = new CachedSort[CachedSortsSize]; // size is fixed and used in GetPropertiesHashedIndex
+//                 if (prop.PropertyId != PropertiesDiscovered)
+//                 {
+//                     prop = SwapPropertyIds(prop);
+//                 }
+//                 PropertiesDiscovered++;
+//                 return prop;
+//             }
 
-        private readonly List<PropertyName> _docPropNames = new List<PropertyName>();
-        private readonly SortedDictionary<PropertyName, object> _propertiesSortOrder = new SortedDictionary<PropertyName, object>();
-        private readonly Dictionary<LazyStringValue, PropertyName> _propertyNameToId = new Dictionary<LazyStringValue, PropertyName>();
-        private bool _propertiesNeedSorting;
+//             return UnlikelyGetProperty(propName);
+//         }
 
-        public int PropertiesDiscovered;
+//         private PropertyName UnlikelyGetProperty(LazyStringValue propName)
+//         {
+//             var propIndex = _docPropNames.Count;
+//             propName = _context.GetLazyStringForFieldWithCaching(propName);
+//             var prop = new PropertyName(_propertyNameCounter++)
+//             {
+//                 Comparer = propName,
+//                 GlobalSortOrder = -1,
+//                 PropertyId = propIndex
+//             };
 
-        public CachedProperties(JsonOperationContext context)
-        {
-            _context = context;
-            _sorter = new Sorter<BlittableJsonDocumentBuilder.PropertyTag, PropertySorter>(new PropertySorter(this));
-        }
+//             _docPropNames.Add(prop);
+//             _propertiesSortOrder.Add(prop, prop);
+//             _propertyNameToId[propName] = prop;
+//             _propertiesNeedSorting = true;
+//             if (_docPropNames.Count > PropertiesDiscovered + 1)
+//             {
+//                 prop = SwapPropertyIds(prop);
+//             }
+//             PropertiesDiscovered++;
+//             return prop;
+//         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public PropertyName GetProperty(LazyStringValue propName)
-        {
-            PropertyName prop;
-            if (_propertyNameToId.TryGetValue(propName, out prop))
-            {
-                // PERF: This is the most common scenario, we need it to come first. 
-                if (prop.PropertyId < PropertiesDiscovered)
-                    return prop;
+//         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+//         private PropertyName SwapPropertyIds(PropertyName prop)
+//         {
+//             // this property doesn't match the order that we previously saw the properties.
+//             // it is possible that this is a completely new format, or just properties
+//             // in different order. 
+//             // we'll assume the later and move the property around, this is safe to 
+//             // do because we ignore the properties showing up after the PropertiesDiscovered
 
-                if (prop.PropertyId != PropertiesDiscovered)
-                {
-                    prop = SwapPropertyIds(prop);
-                }
-                PropertiesDiscovered++;
-                return prop;
-            }
+//             int xPropertyId = PropertiesDiscovered;
+//             int yPropertyId = prop.PropertyId;
 
-            return UnlikelyGetProperty(propName);
-        }
+//             var x = _docPropNames[xPropertyId];           
+//             var y = _docPropNames[yPropertyId];
 
-        private PropertyName UnlikelyGetProperty(LazyStringValue propName)
-        {
-            var propIndex = _docPropNames.Count;
-            propName = _context.GetLazyStringForFieldWithCaching(propName);
-            var prop = new PropertyName(_propertyNameCounter++)
-            {
-                Comparer = propName,
-                GlobalSortOrder = -1,
-                PropertyId = propIndex
-            };
+//             x.PropertyId = yPropertyId;
+//             y.PropertyId = xPropertyId;
 
-            _docPropNames.Add(prop);
-            _propertiesSortOrder.Add(prop, prop);
-            _propertyNameToId[propName] = prop;
-            _propertiesNeedSorting = true;
-            if (_docPropNames.Count > PropertiesDiscovered + 1)
-            {
-                prop = SwapPropertyIds(prop);
-            }
-            PropertiesDiscovered++;
-            return prop;
-        }
+//             _docPropNames[xPropertyId] = y;
+//             _docPropNames[yPropertyId] = x;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private PropertyName SwapPropertyIds(PropertyName prop)
-        {
-            // this property doesn't match the order that we previously saw the properties.
-            // it is possible that this is a completely new format, or just properties
-            // in different order. 
-            // we'll assume the later and move the property around, this is safe to 
-            // do because we ignore the properties showing up after the PropertiesDiscovered
+//             return y;
+//         }
 
-            int xPropertyId = PropertiesDiscovered;
-            int yPropertyId = prop.PropertyId;
+//         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+//         public void Sort(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
+//         {
+//             var index = GetPropertiesHashedIndex(properties);
 
-            var x = _docPropNames[xPropertyId];           
-            var y = _docPropNames[yPropertyId];
+//             // Sort object properties metadata by property names
+//             if (_propertiesNeedSorting)
+//             {
+//                 UpdatePropertiesSortOrder();
+//             }
 
-            x.PropertyId = yPropertyId;
-            y.PropertyId = xPropertyId;
+//             var cachedSort = _cachedSorts[index];
+//             if (cachedSort?.Sorting.Count != properties.Count)
+//             {
+//                 UnlikelySortProperties(properties);
+//                 return;
+//             }
 
-            _docPropNames[xPropertyId] = y;
-            _docPropNames[yPropertyId] = x;
+//             // we are frequently going to see documents with ids in the same order
+//             // so we can take advantage of that by remember the previous sort, we 
+//             // check if the values are the same, and if so, save the sort
 
-            return y;
-        }
+//             var sortingList = cachedSort.Sorting;
+//             for (int i = 0; i < properties.Count; i++)
+//             {
+//                 var sortingProp = sortingList[i];
+//                 var sortedProp = properties[i];
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Sort(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
-        {
-            var index = GetPropertiesHashedIndex(properties);
+//                 if (sortingProp.Property.Equals(sortedProp.Property))
+//                 {
+//                     sortingProp.Tmp = sortedProp;
+//                 }
+//                 else
+//                 {
+//                     UnlikelySortProperties(properties);
+//                     return;
+//                 }
+//             }
 
-            // Sort object properties metadata by property names
-            if (_propertiesNeedSorting)
-            {
-                UpdatePropertiesSortOrder();
-            }
+//             // ReSharper disable once ForCanBeConvertedToForeach
+//             int sortingListCount = sortingList.Count;
+//             for (int i = 0; i < sortingListCount; i++)
+//             {
+//                 var sortingProp = sortingList[i];
+//                 properties[sortingProp.SortedPosition] = sortingProp.Tmp;
+//             }
 
-            var cachedSort = _cachedSorts[index];
-            if (cachedSort?.Sorting.Count != properties.Count)
-            {
-                UnlikelySortProperties(properties);
-                return;
-            }
+//             int finalCount = cachedSort.FinalCount;
+//             if (properties.Count != finalCount)
+//             {
+//                 properties.RemoveRange(finalCount, properties.Count - finalCount);
+//             }            
+//         }
 
-            // we are frequently going to see documents with ids in the same order
-            // so we can take advantage of that by remember the previous sort, we 
-            // check if the values are the same, and if so, save the sort
+//         [MethodImpl(MethodImplOptions.AggressiveInlining)]
+//         private int GetPropertiesHashedIndex(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
+//         {
+//             int count = properties.Count;
 
-            var sortingList = cachedSort.Sorting;
-            for (int i = 0; i < properties.Count; i++)
-            {
-                var sortingProp = sortingList[i];
-                var sortedProp = properties[i];
+//             int hash = 0;
+//             for (int i = 0; i < count; i++)
+//             {
+//                 hash += properties[i].Property.HashCode;
+//             }
 
-                if (sortingProp.Property.Equals(sortedProp.Property))
-                {
-                    sortingProp.Tmp = sortedProp;
-                }
-                else
-                {
-                    UnlikelySortProperties(properties);
-                    return;
-                }
-            }
+// //            Debug.Assert(_cachedSorts.Length == CachedSortsSize && Bits.NextPowerOf2(CachedSortsSize) == CachedSortsSize); 
 
-            // ReSharper disable once ForCanBeConvertedToForeach
-            int sortingListCount = sortingList.Count;
-            for (int i = 0; i < sortingListCount; i++)
-            {
-                var sortingProp = sortingList[i];
-                properties[sortingProp.SortedPosition] = sortingProp.Tmp;
-            }
+//             hash &= (CachedSortsSize-1); // % CachedSortsSize 
+//             return hash;
+//         }
 
-            int finalCount = cachedSort.FinalCount;
-            if (properties.Count != finalCount)
-            {
-                properties.RemoveRange(finalCount, properties.Count - finalCount);
-            }            
-        }
+//         private void UnlikelySortProperties(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
+//         {
+//             _hasDuplicates = false;
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private int GetPropertiesHashedIndex(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
-        {
-            int count = properties.Count;
+//             var index = GetPropertiesHashedIndex(properties);
 
-            int hash = 0;
-            for (int i = 0; i < count; i++)
-            {
-                hash += properties[i].Property.HashCode;
-            }
+//             if (_cachedSorts[index] == null)
+//                 _cachedSorts[index] = new CachedSort();
 
-//            Debug.Assert(_cachedSorts.Length == CachedSortsSize && Bits.NextPowerOf2(CachedSortsSize) == CachedSortsSize); 
+//             _cachedSorts[index].Sorting.Clear();
 
-            hash &= (CachedSortsSize-1); // % CachedSortsSize 
-            return hash;
-        }
+//             for (int i = 0; i < properties.Count; i++)
+//             {
+//                 _cachedSorts[index].Sorting.Add(new PropertyPosition
+//                 {
+//                     Property = properties[i].Property,
+//                     SortedPosition = -1
+//                 });
+//             }
 
-        private void UnlikelySortProperties(List<BlittableJsonDocumentBuilder.PropertyTag> properties)
-        {
-            _hasDuplicates = false;
+//             _cachedSorts[index].FinalCount = properties.Count;
 
-            var index = GetPropertiesHashedIndex(properties);
+//             properties.Sort();// ADIADI :: ref _sorter);
 
-            if (_cachedSorts[index] == null)
-                _cachedSorts[index] = new CachedSort();
+//             // The item comparison method has a side effect, which can modify the _hasDuplicates field.
+//             // This can either be true or false at any given time. 
+//             if (_hasDuplicates)
+//             {
+//                 // leave just the latest
+//                 for (int i = 0; i < properties.Count - 1; i++)
+//                 {
+//                     if (properties[i].Property.Equals(properties[i + 1].Property))
+//                     {
+//                         _cachedSorts[index].FinalCount--;
+//                         _cachedSorts[index].Sorting[i + 1] = new PropertyPosition
+//                         {
+//                             Property = properties[i + 1].Property,
+//                             // set it to the previous value, so it'll just overwrite
+//                             // this saves us a check and more complex code
+//                             SortedPosition = i 
+//                         };
 
-            _cachedSorts[index].Sorting.Clear();
+//                         properties.RemoveAt(i + 1);
 
-            for (int i = 0; i < properties.Count; i++)
-            {
-                _cachedSorts[index].Sorting.Add(new PropertyPosition
-                {
-                    Property = properties[i].Property,
-                    SortedPosition = -1
-                });
-            }
+//                         i--;
+//                     }
+//                 }
+//             }            
 
-            _cachedSorts[index].FinalCount = properties.Count;
-
-            properties.Sort();// ADIADI :: ref _sorter);
-
-            // The item comparison method has a side effect, which can modify the _hasDuplicates field.
-            // This can either be true or false at any given time. 
-            if (_hasDuplicates)
-            {
-                // leave just the latest
-                for (int i = 0; i < properties.Count - 1; i++)
-                {
-                    if (properties[i].Property.Equals(properties[i + 1].Property))
-                    {
-                        _cachedSorts[index].FinalCount--;
-                        _cachedSorts[index].Sorting[i + 1] = new PropertyPosition
-                        {
-                            Property = properties[i + 1].Property,
-                            // set it to the previous value, so it'll just overwrite
-                            // this saves us a check and more complex code
-                            SortedPosition = i 
-                        };
-
-                        properties.RemoveAt(i + 1);
-
-                        i--;
-                    }
-                }
-            }            
-
-            for (int i = 0; i < _cachedSorts[index].Sorting.Count; i++)
-            {
-                var propPos = _cachedSorts[index].Sorting[i];
-                propPos.SortedPosition = -1;
-                for (int j = 0; j < properties.Count; j++)
-                {
-                    if (properties[j].Property == propPos.Property)
-                    {
-                        propPos.SortedPosition = j;
-                        break;
-                    }
+//             for (int i = 0; i < _cachedSorts[index].Sorting.Count; i++)
+//             {
+//                 var propPos = _cachedSorts[index].Sorting[i];
+//                 propPos.SortedPosition = -1;
+//                 for (int j = 0; j < properties.Count; j++)
+//                 {
+//                     if (properties[j].Property == propPos.Property)
+//                     {
+//                         propPos.SortedPosition = j;
+//                         break;
+//                     }
                     
-                }
-            }
+//                 }
+//             }
 
-        }
+//         }
 
-        private void UpdatePropertiesSortOrder()
-        {
-            int index = 0;
-            foreach (var o in _propertiesSortOrder)
-            {
-                o.Key.GlobalSortOrder = index++;
-            }
-            _propertiesNeedSorting = false;
-        }
+//         private void UpdatePropertiesSortOrder()
+//         {
+//             int index = 0;
+//             foreach (var o in _propertiesSortOrder)
+//             {
+//                 o.Key.GlobalSortOrder = index++;
+//             }
+//             _propertiesNeedSorting = false;
+//         }
 
-        private bool _hasDuplicates;
+//         private bool _hasDuplicates;
 
 
 
-        public LazyStringValue GetProperty(int index)
-        {
-            return _docPropNames[index].Comparer;
-        }
+//         public LazyStringValue GetProperty(int index)
+//         {
+//             return _docPropNames[index].Comparer;
+//         }
 
-        public void NewDocument()
-        {
-            PropertiesDiscovered = 0;
-        }
-    }
-}
+//         public void NewDocument()
+//         {
+//             PropertiesDiscovered = 0;
+//         }
+//     }
+// }

@@ -12,18 +12,6 @@ namespace Sparrow.Json
 {
     public unsafe class ArenaMemoryAllocator : IDisposable
     {
-        private long _allocated;
-
-        public long Allocated
-        {
-            get
-            {
-                var totalAllocation = _allocated;
-              
-                return totalAllocation;
-            }
-        }
-
         public ArenaMemoryAllocator()
         {            
         }
@@ -65,17 +53,7 @@ namespace Sparrow.Json
         public void Return(AllocatedMemoryData allocation)
         {
             Marshal.FreeHGlobal((IntPtr)allocation.Address);
-        }
-
-        public class IntPtrComarer : IComparer<IntPtr>
-        {
-            public static IntPtrComarer Instance = new IntPtrComarer();
-
-            public int Compare(IntPtr x, IntPtr y)
-            {
-                return Math.Sign((x.ToInt64() - y.ToInt64()));
-            }
-        }
+        }  
     }
 
     public unsafe class AllocatedMemoryData
