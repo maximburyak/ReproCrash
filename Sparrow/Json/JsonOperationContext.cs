@@ -205,22 +205,6 @@ namespace Sparrow.Json
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public LazyStringValue GetLazyStringForFieldWithCaching(StringSegment key)
-        {
-            EnsureNotDisposed();
-
-            var field = key.Value; // This will allocate if we are using a substring. 
-            if (_fieldNames.TryGetValue(field, out LazyStringValue value))
-            {
-                //sanity check, in case the 'value' is manually disposed outside of this function
-                Debug.Assert(value.IsDisposed == false);
-                return value;
-            }
-
-            return GetLazyStringForFieldWithCachingUnlikely(field);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public LazyStringValue GetLazyStringForFieldWithCaching(string field)
         {
             EnsureNotDisposed();
@@ -231,22 +215,9 @@ namespace Sparrow.Json
                 return value;
             }
 
-            return GetLazyStringForFieldWithCachingUnlikely(field);
-        }
-
-        private LazyStringValue GetLazyStringForFieldWithCachingUnlikely(StringSegment key)
-        {
-            EnsureNotDisposed();
-            LazyStringValue value = GetLazyString(key, longLived: true);
-            _fieldNames[key] = value;
-
-            //sanity check, in case the 'value' is manually disposed outside of this function
-            Debug.Assert(value.IsDisposed == false);
-            return value;
-        }
-
-        
-        private unsafe LazyStringValue GetLazyString(StringSegment field, bool longLived)
+            return GetLazyString(field, longLived: true);
+        }        
+        private unsafe LazyStringValue GetLazyString(string field, bool longLived)
         {
             var state = new JsonParserState();
             var maxByteCount = Encoding.UTF8.GetMaxByteCount(field.Length);
@@ -256,10 +227,10 @@ namespace Sparrow.Json
             int memorySize = maxByteCount + escapePositionsSize;
             var memory = longLived ? GetLongLivedMemory(memorySize) : GetMemory(memorySize);
 
-            fixed (char* pField = field.Buffer)
+            fixed (char* pField = field)
             {
                 var address = memory.Address;
-                var actualSize = Encoding.UTF8.GetBytes(pField + field.Offset, field.Length, address, memory.SizeInBytes);
+                var actualSize = Encoding.UTF8.GetBytes(pField, field.Length, address, memory.SizeInBytes);
 
                 state.FindEscapePositionsIn(address, actualSize, escapePositionsSize);
 

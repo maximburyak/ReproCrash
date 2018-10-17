@@ -10,7 +10,7 @@ namespace Sparrow.Json
     public sealed class BlittableJsonDocumentBuilder : IDisposable
     {
 
-        private static readonly StringSegment UnderscoreSegment = new StringSegment("_");
+        private static readonly string UnderscoreSegment = "_";
 
         private readonly Stack<BuildingState> _continuationState = new Stack<BuildingState>();
 
