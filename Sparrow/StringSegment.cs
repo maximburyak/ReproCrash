@@ -25,32 +25,7 @@ namespace Sparrow
             _valueString = buffer;
         }
 
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public StringSegment(string buffer, int offset, int length)
-        {
-            Debug.Assert(buffer != null);
-            Debug.Assert(offset >= 0);
-            Debug.Assert(length >= 0);
-            Debug.Assert(offset + length <= buffer.Length);
-
-            Offset = offset;
-            Length = length;
-            Buffer = buffer;
-            _valueString = null;
-            if (Offset == 0 && Length == buffer.Length)
-                _valueString = buffer;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public StringSegment Subsegment(int offset, int length = -1)
-        {
-            Debug.Assert(offset >= 0 && offset <= Length);
-            if (length == -1)
-                length = Length - offset;
-            Debug.Assert(length >= 0 && offset + length <= Length);
-            return new StringSegment(Buffer, Offset + offset, length);
-        }
-
+ 
         // String's indexing will throw a IndexOutOfRange exception if required
         public char this[int index]
         {
@@ -71,52 +46,7 @@ namespace Sparrow
         public static implicit operator string(StringSegment segment)
         {
             return segment.Value;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool StartsWith(string prefix)
-        {
-            if (prefix.Length > Length)
-                return false;
-            return string.CompareOrdinal(Buffer, Offset, prefix, 0, prefix.Length) == 0;
-        }
-
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool EndsWith(string postfix)
-        {
-            if (postfix.Length > Length)
-                return false;
-            return string.CompareOrdinal(Buffer, Offset + Length - postfix.Length, postfix, 0, postfix.Length) == 0;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int IndexOfAny(char[] charArray, int startIndex)
-        {
-            if (startIndex < 0 && startIndex >= Length)
-                ThrowOutOfRangeIndex(startIndex);
-            //zero based index since we are in a segment
-            var indexOfAny = Buffer.IndexOfAny(charArray, Offset + startIndex, Length - startIndex);
-            if (indexOfAny == -1)
-                return -1;
-
-            return indexOfAny - Offset;
-        }
-
-        private void ThrowOutOfRangeIndex(int startIndex)
-        {
-            throw new ArgumentOutOfRangeException(nameof(startIndex), $"startIndex has value of {startIndex} but the length of \'{this}\' is {Length}");
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int IndexOfLast(char[] charArray)
-        {
-            var indexOfAny = Buffer.LastIndexOfAny(charArray, Offset + Length - 1, Length);
-            if (indexOfAny == -1)
-                return -1;
-
-            return indexOfAny - Offset;
-        }
+        }      
 
         public override bool Equals(object obj)
         {
@@ -143,7 +73,6 @@ namespace Sparrow
                 return Memory.Compare((byte*)pSelf + Offset * sizeof(char), (byte*)pOther, Length * sizeof(char)) == 0;
             }
         }
-
 
         public bool Equals(string other, StringComparison stringComparison)
         {
@@ -178,19 +107,6 @@ namespace Sparrow
         public override string ToString()
         {
             return Value;
-        }
-
-
-        public bool IsNullOrWhiteSpace()
-        {
-            if (Buffer == null || Length == 0)
-                return true;
-            for (int i = 0; i < Length; i++)
-            {
-                if (char.IsWhiteSpace(Buffer[Offset + i]) == false)
-                    return false;
-            }
-            return true;
         }
     }
 }

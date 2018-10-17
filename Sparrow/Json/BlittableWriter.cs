@@ -57,13 +57,7 @@ namespace Sparrow.Json
         public int WriteValue(float value)
         {
             return WriteValue((double)value);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int WriteValue(LazyNumberValue value)
-        {
-            return WriteValue(value.Inner);
-        }
+        }  
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public int WriteValue(byte value)

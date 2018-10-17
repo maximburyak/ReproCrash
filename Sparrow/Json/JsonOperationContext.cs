@@ -10,7 +10,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using Sparrow.Global;
 using Sparrow.Json.Parsing;
 using Sparrow.Threading;
 
@@ -25,32 +24,13 @@ namespace Sparrow.Json
     /// </summary>
     public class JsonOperationContext : IDisposable
     {
-        private int _generation;        
-        private readonly int _initialSize;
-        private readonly int _longLivedSize;
+        private int _generation;                        
         private readonly ArenaMemoryAllocator _arenaAllocator;
         private ArenaMemoryAllocator _arenaAllocatorForLongLivedValues;
         private AllocatedMemoryData _tempBuffer;
         private List<string> _normalNumbersStringBuffers = new List<string>(5);
         private string _hugeNumbersBuffer;
-
         private readonly Dictionary<string, LazyStringValue> _fieldNames = new Dictionary<string, LazyStringValue>();
-
-        private struct PathCacheHolder
-        {
-            public PathCacheHolder(Dictionary<StringSegment, object> path, Dictionary<int, object> byIndex)
-            {
-                Path = path;
-                ByIndex = byIndex;
-            }
-
-            public readonly Dictionary<StringSegment, object> Path;
-            public readonly Dictionary<int, object> ByIndex;
-        }
-
-        private int _numberOfAllocatedPathCaches = -1;
-        private readonly PathCacheHolder[] _allocatePathCaches = new PathCacheHolder[512];
-        
         private int _numberOfAllocatedStringsValues;
         private readonly List<LazyStringValue> _allocateStringValues = new List<LazyStringValue>(256);
 
@@ -79,7 +59,6 @@ namespace Sparrow.Json
             public int Length;
             public int Valid, Used;
             public byte* Pointer;
-
             private bool _disposed;
             public GCHandle Handle;
 
@@ -111,25 +90,17 @@ namespace Sparrow.Json
         }             
 
         private Stack<ManagedPinnedBuffer> _managedBuffers;
-
         public CachedProperties CachedProperties;
-
         private readonly JsonParserState _jsonParserState;
         private readonly BlittableJsonDocumentBuilder _documentBuilder;
-
         public int Generation => _generation;
-        
-
-        protected readonly SharedMultipleUseFlag LowMemoryFlag;
-
         public static JsonOperationContext ShortTermSingleUse()
         {
-            return new JsonOperationContext(4096, 1024, SharedMultipleUseFlag.None);
+            return new JsonOperationContext();
         }
 
-        public JsonOperationContext(int initialSize, int longLivedSize, SharedMultipleUseFlag lowMemoryFlag)
-        {
-            Debug.Assert(lowMemoryFlag != null);
+        public JsonOperationContext()
+        {            
             _disposeOnceRunner = new DisposeOnce<ExceptionRetry>(() =>
             {
                 Reset(true);
@@ -149,15 +120,12 @@ namespace Sparrow.Json
                     _managedBuffers = null;
                 }
             });
-
-            _initialSize = initialSize;
-            _longLivedSize = longLivedSize;
+                        
             _arenaAllocator = new ArenaMemoryAllocator();
             _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
             CachedProperties = new CachedProperties(this);
             _jsonParserState = new JsonParserState();
-            _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);
-            LowMemoryFlag = lowMemoryFlag;
+            _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);            
         }
 
         public ReturnBuffer GetManagedBuffer(out ManagedPinnedBuffer buffer)
@@ -341,8 +309,7 @@ namespace Sparrow.Json
             // When a context is re-used, the buffer containing those field names was not reset and the strings are still valid and alive.
 
             var allocatorForLongLivedValues = _arenaAllocatorForLongLivedValues;
-            if (allocatorForLongLivedValues != null &&
-                (allocatorForLongLivedValues.Allocated > _initialSize || forceReleaseLongLivedAllocator))
+            if (allocatorForLongLivedValues != null || forceReleaseLongLivedAllocator)
             {
                 foreach (var mem in _fieldNames.Values)
                 {

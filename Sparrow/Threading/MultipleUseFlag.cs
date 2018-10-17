@@ -24,12 +24,7 @@ namespace Sparrow.Threading
     /// structs should this be a perf issue in the future.
     public class MultipleUseFlag
     {
-        private int _state;
-
-        public MultipleUseFlag(MultipleUseFlag other)
-        {
-            throw new InvalidOperationException($"Copy of {nameof(MultipleUseFlag)} is forbidden");
-        }
+        private int _state;    
 
         /// <summary>
         /// Creates a flag.
@@ -40,52 +35,6 @@ namespace Sparrow.Threading
             _state = 0;
             if (raised)
                 Interlocked.Exchange(ref _state, 1);
-        }
-
-        /// <summary>
-        /// Raises the flag. If already up, throws InvalidOperationException.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RaiseOrDie()
-        {
-            if (Raise() == false)
-                ThrowRaiseException();
-        }
-
-        /// <summary>
-        /// This is here to allow RaiseOrDie() to be inlined.
-        /// </summary>
-        private static void ThrowRaiseException()
-        {
-            throw new InvalidOperationException($"Repeated Raise for a {nameof(MultipleUseFlag)} instance");
-        }
-
-        /// <summary>
-        /// Lowers the flag. If already low, throws InvalidOperationException.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void LowerOrDie()
-        {
-            if (Lower() == false)
-                ThrowLowerException();
-        }
-
-        /// <summary>
-        /// This is here to allow LowerOrDie() to be inlined.
-        /// </summary>
-        private static void ThrowLowerException()
-        {
-            throw new InvalidOperationException($"Repeated Lower for a {nameof(MultipleUseFlag)} instance");
-        }
-
-        /// <summary>
-        /// Lowers the flag
-        /// </summary>
-        /// <returns>If already low, false; otherwise, true</returns>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Lower()
-        {
-            return Interlocked.CompareExchange(ref _state, 0, 1) == 1;
         }
 
         /// <summary>

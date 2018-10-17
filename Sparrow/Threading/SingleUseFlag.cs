@@ -23,12 +23,7 @@ namespace Sparrow.Threading
     /// structs should this be a perf issue in the future.
     public class SingleUseFlag
     {
-        private int _state;
-
-        public SingleUseFlag(SingleUseFlag other)
-        {
-            throw new InvalidOperationException($"Copy of {nameof(SingleUseFlag)} is forbidden");
-        }
+        private int _state; 
 
         /// <summary>
         /// Creates a flag.
@@ -39,25 +34,7 @@ namespace Sparrow.Threading
             _state = 0;
             if (raised)
                 Interlocked.Exchange(ref _state, 1);
-        }
-
-        /// <summary>
-        /// Raises the flag. If already up, throws InvalidOperationException.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void RaiseOrDie()
-        {
-            if (Raise() == false)
-                ThrowException();
-        }
-
-        /// <summary>
-        /// This is here to allow RaiseOrDie() to be inlined.
-        /// </summary>
-        private static void ThrowException()
-        {
-            throw new InvalidOperationException($"Repeated Raise for a {nameof(SingleUseFlag)} instance");
-        }
+        }  
 
         /// <summary>
         /// Raises the flag

@@ -58,7 +58,6 @@ namespace Sparrow.Json
             }
         }
 
-
         public BlittableJsonDocumentBuilder(JsonOperationContext context, JsonParserState state, IJsonParser reader)
         {
             _context = context;                                   

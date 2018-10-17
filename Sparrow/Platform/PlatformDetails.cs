@@ -14,20 +14,5 @@ namespace Sparrow.Platform
                                                      RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
 
         public static readonly bool RunningOnMacOsx = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
-
-        public static readonly bool RunningOnLinux = RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
-
-
-        public static ulong GetCurrentThreadId()
-        {
-//            if (RunningOnPosix == false)
-//                return Win32ThreadsMethods.GetCurrentThreadId();
-
-//            if (RunningOnLinux)
-                return (ulong)Syscall.syscall0(PerPlatformValues.SyscallNumbers.SYS_gettid);
-
-//            // OSX
-//            return macSyscall.pthread_self();
-        }
     }
 }

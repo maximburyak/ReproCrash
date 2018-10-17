@@ -40,7 +40,7 @@ namespace Repro
         {
             MemoryStream stream = new MemoryStream(filebytes1,0,filebytes1.Length, true, true);            
             var state = new JsonParserState();
-            using(var ctx = new JsonOperationContext(1024* 32, 1024*128, SharedMultipleUseFlag.None))
+            using(var ctx = new JsonOperationContext())
             using (var sssssssss = JsonOperationContext.ShortTermSingleUse())
             using (var parser = new UnmanagedJsonParser(sssssssss, state, "ourtest"))
             {
@@ -124,21 +124,6 @@ namespace Repro
         
         private static void ReadJson(UnmanagedJsonParser parser, MemoryStream stream, JsonParserState state, JsonOperationContext sssssssss)
         {
-//            var endObj = 1;
-//            while (endObj != 0)
-//            {
-//                ReadNextToken(parser, stream);
-//                if (state.CurrentTokenType == JsonParserToken.EndObject)
-//                {
-//                    endObj--;
-//                }
-//
-//                if (state.CurrentTokenType == JsonParserToken.StartObject)
-//                {
-//                    endObj++;
-//                }
-//            }
-
             using (var builder = new BlittableJsonDocumentBuilder(sssssssss,
                 BlittableJsonDocumentBuilder.UsageMode.ToDisk,
                 "users/1", parser, state))

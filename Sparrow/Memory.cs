@@ -6,8 +6,6 @@ namespace Sparrow
 {
     public static unsafe class Memory
     {
-        public const int CompareInlineVsCallThreshold = 256;
-
         public static int Compare(byte* p1, byte* p2, int size)
         {
             return CompareInline(p1, p2, size);
@@ -40,8 +38,7 @@ namespace Sparrow
         /// Bulk copy is optimized to handle copy operations where n is statistically big. While it will use a faster copy operation for 
         /// small amounts of memory, when you have smaller than 2048 bytes calls (depending on the target CPU) it will always be
         /// faster to call .Copy() directly.
-        /// </summary>
-        
+        /// </summary>        
         private static void BulkCopy(void* dest, void* src, long n)
         {
             UnmanagedMemory.Copy((byte*)dest, (byte*)src, n);            
@@ -70,46 +67,6 @@ namespace Sparrow
             }
 
             BulkCopy(dest, src, n);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Set(byte* dest, byte value, uint n)
-        {
-            Unsafe.InitBlock(dest, value, n);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void Set(byte* dest, byte value, int n)
-        {
-            Unsafe.InitBlock(dest, value, (uint)n);
-        }
-
-        public static void Set(byte* dest, byte value, long n)
-        {
-            SetInline(dest, value, n);
-        }
-
-        /// <summary>
-        /// Set is optimized to handle copy operations where n is statistically small.       
-        /// </summary>
-        /// <remarks>This is a forced inline version, use with care.</remarks>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void SetInline(byte* dest, byte value, long n)
-        {
-            if (n == 0)
-                goto Finish;
-
-            if (n < int.MaxValue)
-            {
-                Unsafe.InitBlock(dest, value, (uint)n);
-            }
-            else
-            {
-                UnmanagedMemory.Set(dest, value, n);
-            }
-
-            Finish:
-            ;
-        }
+        }           
     }
 }
