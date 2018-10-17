@@ -28,9 +28,6 @@ namespace Sparrow.Platform.Posix
         [DllImport(LIBC_6, EntryPoint = "memset", CallingConvention = CallingConvention.Cdecl, SetLastError = false)]
         [SecurityCritical]
         public static extern IntPtr Set(byte* dest, int c, long count);
-
-        [DllImport(LIBC_6, EntryPoint = "syscall", SetLastError = true)]
-        public static extern long syscall0(long number);
  
         [DllImport(LIBC_6, SetLastError = true)]
         public static extern int mprotect(IntPtr start, ulong size, ProtFlag protFlag);   

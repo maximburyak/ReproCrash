@@ -9,8 +9,8 @@ using System.Text;
 namespace Sparrow.Json
 {
     // PERF: Sealed because in CoreCLR 2.0 it will devirtualize virtual calls methods like GetHashCode.
-    public sealed unsafe class LazyStringValue : IComparable<string>, IEquatable<string>,
-        IComparable<LazyStringValue>, IEquatable<LazyStringValue>, IDisposable, IComparable
+    public sealed unsafe class LazyStringValue :IEquatable<string>,
+        IEquatable<LazyStringValue>, IDisposable
     {
         internal JsonOperationContext __context;
         internal JsonOperationContext _context

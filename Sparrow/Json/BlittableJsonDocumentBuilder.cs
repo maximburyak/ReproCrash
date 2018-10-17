@@ -20,53 +20,14 @@ namespace Sparrow.Json
         private readonly JsonParserState _state;
         private LazyStringValue _fakeFieldName;
 
-        private readonly SingleUseFlag _disposed = new SingleUseFlag();
-
         private WriteToken _writeToken;
-        private string _debugTag;
-
-        private readonly ListCache<PropertyTag> _propertiesCache;
-        private readonly ListCache<int> _positionsCache;
-        private readonly ListCache<BlittableJsonToken> _tokensCache;
-
-        private class ListCache<T>
-        {
-            private readonly List<List<T>> _cache = new List<List<T>>();
-            private int _index = 0;
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public List<T> Allocate()
-            {
-                if (_index != _cache.Count)
-                    return _cache[_index++];
-
-                var n = new List<T>();
-                _cache.Add(n);
-                _index++;
-                return n;
-            }
-
-            [MethodImpl(MethodImplOptions.AggressiveInlining)]
-            public void Reset()
-            {
-                for (var i = 0; i < _index; i++)
-                {
-                    var t = _cache[i];
-                    t.Clear();
-                }
-                _index = 0;
-            }
-        }
+        private string _debugTag;        
 
         public BlittableJsonDocumentBuilder(JsonOperationContext context, JsonParserState state, IJsonParser reader)
         {
             _context = context;
             _state = state;
             _reader = reader;
-
-            _propertiesCache = new ListCache<PropertyTag>();
-            _positionsCache = new ListCache<int>();
-            _tokensCache = new ListCache<BlittableJsonToken>();
         }
 
         public BlittableJsonDocumentBuilder(
@@ -102,9 +63,7 @@ namespace Sparrow.Json
         }
 
         public void Dispose()
-        {
-            if (_disposed.Raise() == false)
-                return;
+        {        
         }
 
         private bool ReadInternal<TWriteStrategy>() where TWriteStrategy : IWriteStrategy
@@ -160,8 +119,7 @@ namespace Sparrow.Json
                             if (state.CurrentTokenType == JsonParserToken.StartObject)
                             {
                                 currentState.State = ContinuationState.ReadPropertyName;
-                                currentState.Properties = new List<PropertyTag>(); // _propertiesCache.Allocate());
-                                //   currentState.FirstWrite = _writer.Position;
+                                currentState.Properties = new List<PropertyTag>();                                 
                                 continue;
                             }
 
@@ -170,8 +128,8 @@ namespace Sparrow.Json
                         case ContinuationState.ReadArray:
                             if (state.CurrentTokenType == JsonParserToken.StartArray)
                             {
-                                currentState.Types = new List<BlittableJsonToken>(); //_tokensCache.Allocate();
-                                currentState.Positions = new List<int>(); // _positionsCache.Allocate());
+                                currentState.Types = new List<BlittableJsonToken>();
+                                currentState.Positions = new List<int>(); 
                                 currentState.State = ContinuationState.ReadArrayValue;
                                 continue;
                             }
@@ -202,10 +160,7 @@ namespace Sparrow.Json
                             currentState.State = ContinuationState.ReadArrayValue;
                             continue;
 
-                        case ContinuationState.CompleteArray:
-                            var arrayToken = BlittableJsonToken.StartArray;
-                            // var arrayInfoStart = _writer.WriteArrayMetadata(currentState.Positions, currentState.Types, ref arrayToken);
-                            // _writeToken = new WriteToken(arrayInfoStart, arrayToken);
+                        case ContinuationState.CompleteArray:                            
                             currentState = continuationState.Pop();
                             continue;
 
@@ -228,10 +183,7 @@ namespace Sparrow.Json
 
                             if (state.CurrentTokenType != JsonParserToken.String)
                                 goto ErrorExpectedProperty;
-
-                            //var property = CreateLazyStringValueFromParserState();
-                            //currentState.CurrentProperty = _context.CachedProperties.GetProperty(property);
-                            //currentState.MaxPropertyId = Math.Max(currentState.MaxPropertyId, currentState.CurrentProperty.PropertyId);
+                          
                             currentState.State = ContinuationState.ReadPropertyValue;
                             continue;
                         case ContinuationState.ReadPropertyValue:
@@ -348,8 +300,7 @@ namespace Sparrow.Json
         }
 
         private unsafe void ReadJsonValueUnlikely<TWriteStrategy>(JsonParserToken current) where TWriteStrategy : IWriteStrategy
-        {
-            int start = 1;
+        {            
             switch (current)
             {
                 case JsonParserToken.StartArray:
