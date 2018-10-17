@@ -4,9 +4,7 @@ using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using Sparrow.Threading;
-#if MEM_GUARD
-using Sparrow.Platform;
-#endif
+
 
 namespace Sparrow.Json
 {

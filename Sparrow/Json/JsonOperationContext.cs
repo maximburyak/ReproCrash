@@ -13,10 +13,6 @@ using System.Threading.Tasks;
 using Sparrow.Json.Parsing;
 using Sparrow.Threading;
 
-#if VALIDATE
-using Sparrow.Platform;
-#endif
-
 namespace Sparrow.Json
 {
     /// <summary>
@@ -357,13 +353,9 @@ namespace Sparrow.Json
 
         private void ThrowUseAfterFree(AllocatedMemoryData allocation)
         {
-#if MEM_GUARD_STACK || TRACK_ALLOCATED_MEMORY_DATA
-            throw new InvalidOperationException(
-                $"UseAfterFree detected! Attempt to return memory from previous generation, Reset has already been called and the memory reused! Allocated by: {allocation.AllocatedBy}. Thread name: {Thread.CurrentThread.Name}");
-#else
             throw new InvalidOperationException(
                 $"UseAfterFree detected! Attempt to return memory from previous generation, Reset has already been called and the memory reused! Thread name: {Thread.CurrentThread.Name}");
-#endif
+
         }
 
         public AvoidOverAllocationScope AvoidOverAllocation()
