@@ -78,11 +78,6 @@ namespace Sparrow.Json
             Renew(debugTag, mode);
         }
 
-        public BlittableJsonDocumentBuilder(JsonOperationContext context, JsonParserState state, UsageMode mode, string debugTag, IJsonParser reader) : this(context, state, reader)
-        {
-            Renew(debugTag, mode);
-        }
-
         public void Reset()
         {
             _debugTag = null;
@@ -102,31 +97,15 @@ namespace Sparrow.Json
             _fakeFieldName = _context.GetLazyStringForFieldWithCaching(UnderscoreSegment);            
         }
 
-        public void ReadArrayDocument()
-        {
-            _continuationState.Push(new BuildingState(ContinuationState.ReadArrayDocument));
-        }
-
-        public void ReadObjectDocument()
-        {
-            _continuationState.Push(new BuildingState(ContinuationState.ReadObjectDocument));
-        }
-
         public void ReadNestedObject()
         {
             _continuationState.Push(new BuildingState(ContinuationState.ReadObject));
         }
 
-        public int SizeInBytes => 0;
-
-
         public void Dispose()
         {
             if (_disposed.Raise() == false)
                 return;
-
-           // _writer.Dispose();
-          //  GlobalCache.Free(_cacheItem);
         }
 
         private bool ReadInternal<TWriteStrategy>() where TWriteStrategy : IWriteStrategy
@@ -135,17 +114,15 @@ namespace Sparrow.Json
             BuildingState currentState;
             IJsonParser reader;
             JsonParserState state;
-            // lock (LockClass.lockobj)
-            {
-                continuationState = _continuationState;
-                currentState = continuationState.Pop();
-                reader = _reader;
-                state = _state;
-            }
+            
+            continuationState = _continuationState;
+            currentState = continuationState.Pop();
+            reader = _reader;
+            state = _state;
+            
 
             while (true)
             {
-                // lock (LockClass.lockobj)
                 {
                     switch (currentState.State)
                     {
@@ -164,16 +141,7 @@ namespace Sparrow.Json
                                 continuationState.Push(currentState);
                                 return false;
                             }
-
-//                            var fakeProperty = _context.CachedProperties.GetProperty(_fakeFieldName);
-//                            currentState.CurrentProperty = fakeProperty;
-//                            currentState.MaxPropertyId = fakeProperty.PropertyId;
-                            //currentState.FirstWrite = _writer.Position;
-                            currentState.Properties = new List<PropertyTag>(); // _propertiesCache.Allocate());
-//                            currentState.Properties.Add(new PropertyTag
-//                            {
-////                                Property = new 
-//                            });
+                            currentState.Properties = new List<PropertyTag>(); 
                             currentState.State = ContinuationState.CompleteDocumentArray;
                             continuationState.Push(currentState);
                             currentState = new BuildingState(ContinuationState.ReadArray);
@@ -312,12 +280,6 @@ namespace Sparrow.Json
             if (_continuationState.Count == 0)
                 return false; //nothing to do
 
-//            if (_mode == UsageMode.None)
-//            {
-//                Console.WriteLine("ERRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR");
-//                return ReadInternal<WriteNone>();
-//            }
-
             return ReadInternal<WriteFull>();
         }
 
@@ -397,13 +359,6 @@ namespace Sparrow.Json
                     _continuationState.Push(new BuildingState(ContinuationState.ReadArray));
                     return;
                 case JsonParserToken.Float:
-//                    if ((_mode & UsageMode.ValidateDouble) == UsageMode.ValidateDouble)
-//                        _reader.ValidateFloat();
-//
-//                  //  start = _writer.WriteValue(_state.StringBuffer, _state.StringSize);
-//
-//                    _state.CompressedSize = null;
-//                    _writeToken = new WriteToken(start, BlittableJsonToken.LazyNumber);
                     return;
                 case JsonParserToken.True:
                 case JsonParserToken.False:
@@ -505,44 +460,10 @@ namespace Sparrow.Json
                 WrittenToken = token;
             }
         }
-        
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe LazyStringValue CreateLazyStringValueFromParserState()
-        {
-            // var lazyStringValueFromParserState = _context.AllocateStringValue(null, _state.StringBuffer, _state.StringSize);
-            var lazyStringValueFromParserState = new LazyStringValue(null, _state.StringBuffer, _state.StringSize, _context);
-
-            // Console.WriteLine(lazyStringValueFromParserState.ToString());
-
-            if (_state.EscapePositions.Count <= 0)
-                return lazyStringValueFromParserState;
-
-            lazyStringValueFromParserState.EscapePositions = _state.EscapePositions.ToArray();
-            return lazyStringValueFromParserState;
-        }
-
-        public void FinalizeDocument()
-        {
-            var documentToken = _writeToken.WrittenToken;
-            var rootOffset = _writeToken.ValuePos;
-
-           // _writer.WriteDocumentMetadata(rootOffset, documentToken);
-        }
-
-        public BlittableJsonReaderObject CreateReader()
-        {
-            return null;//_writer.CreateReader();
-        }
-
 
         public override string ToString()
         {
             return "Building json for " + _debugTag;
-        }
-
-        public bool NeedResetPropertiesCache()
-        {            
-            return _context.CachedProperties.PropertiesDiscovered > CachedProperties.CachedPropertiesSize;
-        }
+        }  
     }
 }

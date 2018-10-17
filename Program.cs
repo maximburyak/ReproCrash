@@ -14,24 +14,20 @@ namespace Repro
     {
         public static unsafe void Main()
         {
-            Console.WriteLine("Starting...");
-            // byte[] filebytes1 = File.ReadAllBytes("/home/cesar/Sources/tmpcommand.txt");
+            Console.WriteLine("Starting...");            
 
             for (int ss = 0; ss < 100; ss++)
             {                
                 Console.WriteLine("************ " + ss + " ***********");
                 Parallel.For(0, 20, a =>
                 {
-                    string readAllText = File.ReadAllText("/home/cesar/Sources/tmpcommand.txt");
+                    string readAllText = File.ReadAllText("tmpcommand.txt");
                     readAllText = readAllText.Replace("/", "_");
                     byte[] filebytes1 = Encoding.UTF8.GetBytes(readAllText);
                     for (int i = 0; i < 1; i++)
-                    {
-                        // Console.Write(" " + i + "(" + Thread.CurrentThread.ManagedThreadId + ")");
-                        // Console.Out.Flush();
+                    {                        
                         ParseFile(filebytes1);
                     }
-
                 }
                 );
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true, true);                

@@ -25,9 +25,7 @@ namespace Sparrow.Json
     /// </summary>
     public class JsonOperationContext : IDisposable
     {
-        private int _generation;
-        public const int InitialStreamSize = 4096;
-        private const int MaxInitialStreamSize = 16 * 1024 * 1024;
+        private int _generation;        
         private readonly int _initialSize;
         private readonly int _longLivedSize;
         private readonly ArenaMemoryAllocator _arenaAllocator;
@@ -52,41 +50,9 @@ namespace Sparrow.Json
 
         private int _numberOfAllocatedPathCaches = -1;
         private readonly PathCacheHolder[] _allocatePathCaches = new PathCacheHolder[512];
-        private Stack<MemoryStream> _cachedMemoryStreams = new Stack<MemoryStream>();
-
+        
         private int _numberOfAllocatedStringsValues;
         private readonly List<LazyStringValue> _allocateStringValues = new List<LazyStringValue>(256);
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void AcquirePathCache(out Dictionary<StringSegment, object> pathCache, out Dictionary<int, object> pathCacheByIndex)
-        {
-            // PERF: Avoids allocating gigabytes in FastDictionary instances on high traffic RW operations like indexing. 
-            if (_numberOfAllocatedPathCaches >= 0)
-            {
-                var cache = _allocatePathCaches[_numberOfAllocatedPathCaches--];
-                Debug.Assert(cache.Path != null);
-                Debug.Assert(cache.ByIndex != null);
-
-                pathCache = cache.Path;
-                pathCacheByIndex = cache.ByIndex;
-
-                return;
-            }
-
-            pathCache = new Dictionary<StringSegment, object>();
-            pathCacheByIndex = new Dictionary<int, object>();
-        }
-
-        public void ReleasePathCache(Dictionary<StringSegment, object> pathCache, Dictionary<int, object> pathCacheByIndex)
-        {
-            if (_numberOfAllocatedPathCaches < _allocatePathCaches.Length - 1 && pathCache.Count < 256)
-            {
-                pathCache.Clear();
-                pathCacheByIndex.Clear();
-
-                _allocatePathCaches[++_numberOfAllocatedPathCaches] = new PathCacheHolder(pathCache, pathCacheByIndex);
-            }
-        }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe LazyStringValue AllocateStringValue(string str, byte* ptr, int size)
@@ -105,25 +71,10 @@ namespace Sparrow.Json
                 _numberOfAllocatedStringsValues++;
             }
             return allocateStringValue;
-        }
-                   
-        public const int LargeBufferSize = 128 * Constants.Size.Kilobyte;
-        
-       
-        internal unsafe class BufferSegment
-        {
-            public byte[] Array;
-            public int Offset;
-            public int Count;
-            public byte* Ptr;
-        }
-
+        }       
         
         public unsafe class ManagedPinnedBuffer : IDisposable
-        {
-            public const int Size =  32 * Constants.Size.Kilobyte;
-
-            internal BufferSegment BufferInstance;
+        {            
             public ArraySegment<byte> Buffer;
             public int Length;
             public int Valid, Used;
@@ -137,9 +88,7 @@ namespace Sparrow.Json
                 if (_disposed)
                     return;
                 _disposed = true;
-                GC.SuppressFinalize(this);
-                var bufferBefore = BufferInstance;
-                BufferInstance = null;
+                GC.SuppressFinalize(this);                
                 Buffer = new ArraySegment<byte>();
 
                 Length = 0;
@@ -159,9 +108,7 @@ namespace Sparrow.Json
             {
                 GC.SuppressFinalize(this); // we only want finalization if we have values                
             }
-
-        }      
-       
+        }             
 
         private Stack<ManagedPinnedBuffer> _managedBuffers;
 
@@ -171,8 +118,7 @@ namespace Sparrow.Json
         private readonly BlittableJsonDocumentBuilder _documentBuilder;
 
         public int Generation => _generation;
-
-        public long AllocatedMemory => _arenaAllocator.TotalUsed;
+        
 
         protected readonly SharedMultipleUseFlag LowMemoryFlag;
 
@@ -186,11 +132,6 @@ namespace Sparrow.Json
             Debug.Assert(lowMemoryFlag != null);
             _disposeOnceRunner = new DisposeOnce<ExceptionRetry>(() =>
             {
-#if MEM_GUARD_STACK
-                ElectricFencedMemory.DecrementConext();
-                ElectricFencedMemory.UnRegisterContextAllocation(this);
-#endif
-
                 Reset(true);
 
                 _documentBuilder.Dispose();
@@ -211,17 +152,12 @@ namespace Sparrow.Json
 
             _initialSize = initialSize;
             _longLivedSize = longLivedSize;
-            _arenaAllocator = new ArenaMemoryAllocator(lowMemoryFlag, initialSize);
-            _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator(lowMemoryFlag, longLivedSize);
+            _arenaAllocator = new ArenaMemoryAllocator();
+            _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator();
             CachedProperties = new CachedProperties(this);
             _jsonParserState = new JsonParserState();
             _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);
             LowMemoryFlag = lowMemoryFlag;
-
-#if MEM_GUARD_STACK
-            ElectricFencedMemory.IncrementConext();
-            ElectricFencedMemory.RegisterContextAllocation(this,Environment.StackTrace);
-#endif
         }
 
         public ReturnBuffer GetManagedBuffer(out ManagedPinnedBuffer buffer)
@@ -269,27 +205,16 @@ namespace Sparrow.Json
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public AllocatedMemoryData GetMemory(int requestedSize)
         {
-#if DEBUG || VALIDATE
-            if (requestedSize <= 0)
-                throw new ArgumentException(nameof(requestedSize));
-#endif
-
             var allocatedMemory = _arenaAllocator.Allocate(requestedSize);
             allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
-#if DEBUG
-            allocatedMemory.IsLongLived = false;
-#endif
+
             return allocatedMemory;
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public AllocatedMemoryData GetLongLivedMemory(int requestedSize)
         {
-#if DEBUG || VALIDATE
-            if (requestedSize <= 0)
-                throw new ArgumentException(nameof(requestedSize));
-#endif
             //we should use JsonOperationContext in single thread
             if (_arenaAllocatorForLongLivedValues == null)
             {
@@ -303,9 +228,6 @@ namespace Sparrow.Json
             var allocatedMemory = _arenaAllocatorForLongLivedValues.Allocate(requestedSize);
             allocatedMemory.ContextGeneration = Generation;
             allocatedMemory.Parent = this;
-#if DEBUG
-            allocatedMemory.IsLongLived = true;
-#endif
             return allocatedMemory;
         }
 
@@ -363,16 +285,6 @@ namespace Sparrow.Json
             return value;
         }
 
-        public LazyStringValue GetLazyString(string field)
-        {
-            EnsureNotDisposed();
-
-            if (field == null)
-                return null;
-
-            return GetLazyString(field, longLived: false);
-        }
-
         
         private unsafe LazyStringValue GetLazyString(StringSegment field, bool longLived)
         {
@@ -403,231 +315,16 @@ namespace Sparrow.Json
                 return result;
             }
         }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public unsafe LazyStringValue GetLazyStringValue(byte* ptr)
-        {
-            // See format of the lazy string ID in the GetLowerIdSliceAndStorageKey method
-            var size = BlittableJsonReaderBase.ReadVariableSizeInt(ptr, 0, out var offset);
-            return AllocateStringValue(null, ptr + offset, size);
-        }
-
-        public BlittableJsonReaderObject ReadForDisk(Stream stream, string documentId)
-        {
-            return ParseToMemory(stream, documentId, BlittableJsonDocumentBuilder.UsageMode.ToDisk);
-        }
-
-        public ValueTask<BlittableJsonReaderObject> ReadForDiskAsync(Stream stream, string documentId, CancellationToken? token = null)
-        {
-            return ParseToMemoryAsync(stream, documentId, BlittableJsonDocumentBuilder.UsageMode.ToDisk, token);
-        }
-
-        public ValueTask<BlittableJsonReaderObject> ReadForMemoryAsync(Stream stream, string documentId, CancellationToken? token = null)
-        {
-            return ParseToMemoryAsync(stream, documentId, BlittableJsonDocumentBuilder.UsageMode.None, token);
-        }
-
-        public BlittableJsonReaderObject ReadForMemory(Stream stream, string documentId)
-        {
-            return ParseToMemory(stream, documentId, BlittableJsonDocumentBuilder.UsageMode.None);
-        }
-
-        public unsafe BlittableJsonReaderObject ReadForMemory(string jsonString, string documentId)
-        {
-            // todo: maybe use ManagedPinnedBuffer here
-            var maxByteSize = Encoding.UTF8.GetMaxByteCount(jsonString.Length);
-
-            fixed (char* val = jsonString)
-            {
-                var buffer = ArrayPool<byte>.Shared.Rent(maxByteSize);
-                try
-                {
-                    fixed (byte* buf = buffer)
-                    {
-                        Encoding.UTF8.GetBytes(val, jsonString.Length, buf, maxByteSize);
-                        using (var ms = new MemoryStream(buffer))
-                        {
-                            return ReadForMemory(ms, documentId);
-                        }
-                    }
-                }
-                finally
-                {
-                    ArrayPool<byte>.Shared.Return(buffer);
-                }
-            }
-        }
-
-        public BlittableJsonReaderObject Read(Stream stream, string documentId)
-        {
-            var state = BlittableJsonDocumentBuilder.UsageMode.ToDisk;
-            return ParseToMemory(stream, documentId, state);
-        }
-
-        private BlittableJsonReaderObject ParseToMemory(Stream stream, string debugTag, BlittableJsonDocumentBuilder.UsageMode mode)
-        {
-            ManagedPinnedBuffer bytes;
-            using (GetManagedBuffer(out bytes))
-            {
-                return ParseToMemory(stream, debugTag, mode, bytes);
-            }
-        }
-
-        public BlittableJsonReaderObject ParseToMemory(Stream stream, string debugTag,
-            BlittableJsonDocumentBuilder.UsageMode mode,
-            ManagedPinnedBuffer bytes)
-        {
-
-            EnsureNotDisposed();
-
-            _jsonParserState.Reset();
-            using (var parser = new UnmanagedJsonParser(this, _jsonParserState, debugTag))
-            using (var builder = new BlittableJsonDocumentBuilder(this, mode, debugTag, parser, _jsonParserState))
-            {
-                CachedProperties.NewDocument();
-                builder.ReadObjectDocument();
-                while (true)
-                {
-                    if (bytes.Valid == bytes.Used)
-                    {
-                        var read = stream.Read(bytes.Buffer.Array, bytes.Buffer.Offset, bytes.Length);
-                        EnsureNotDisposed();
-                        if (read == 0)
-                            throw new EndOfStreamException("Stream ended without reaching end of json content");
-                        bytes.Valid = read;
-                        bytes.Used = 0;
-                    }
-                    parser.SetBuffer(bytes);
-                    var result = builder.Read();
-                    bytes.Used += parser.BufferOffset;
-                    if (result)
-                        break;
-                }
-                builder.FinalizeDocument();
-
-                var reader = builder.CreateReader();
-                return reader;
-            }
-        }
-
-        public unsafe BlittableJsonReaderObject ParseBuffer(byte* buffer, int length, string debugTag,
-            BlittableJsonDocumentBuilder.UsageMode mode)
-        {
-
-            EnsureNotDisposed();
-
-            _jsonParserState.Reset();
-            using (var parser = new UnmanagedJsonParser(this, _jsonParserState, debugTag))
-            using (var builder = new BlittableJsonDocumentBuilder(this, mode, debugTag, parser, _jsonParserState))
-            {
-                CachedProperties.NewDocument();
-                builder.ReadObjectDocument();
-                parser.SetBuffer(buffer, length);
-
-                if (builder.Read() == false)
-                    throw new EndOfStreamException("Buffer ended without reaching end of json content");
-
-                builder.FinalizeDocument();
-
-                var reader = builder.CreateReader();
-                return reader;
-            }
-        }
+      
 
         private void EnsureNotDisposed()
         {
             if (Disposed)
                 ThrowObjectDisposed();
         }
-
-        private ValueTask<BlittableJsonReaderObject> ParseToMemoryAsync(Stream stream, string documentId, BlittableJsonDocumentBuilder.UsageMode mode, CancellationToken? token = null)
-        {
-            using (GetManagedBuffer(out ManagedPinnedBuffer bytes))
-                return ParseToMemoryAsync(stream, documentId, mode, bytes, token);
-        }
-
-        public async ValueTask<BlittableJsonReaderObject> ParseToMemoryAsync(Stream stream, string documentId, BlittableJsonDocumentBuilder.UsageMode mode, ManagedPinnedBuffer bytes,
-            CancellationToken? token = null,
-            int maxSize = int.MaxValue)
-        {
-            EnsureNotDisposed();
-
-            _jsonParserState.Reset();
-            UnmanagedJsonParser parser = null;
-            BlittableJsonDocumentBuilder builder = null;
-            var generation = _generation;
-            var streamDisposer = token?.Register(stream.Dispose);
-            try
-            {
-                parser = new UnmanagedJsonParser(this, _jsonParserState, documentId);
-                builder = new BlittableJsonDocumentBuilder(this, mode, documentId, parser, _jsonParserState);
-
-                CachedProperties.NewDocument();
-                builder.ReadObjectDocument();
-                while (true)
-                {
-                    token?.ThrowIfCancellationRequested();
-                    if (bytes.Valid == bytes.Used)
-                    {
-                        var read = token.HasValue
-                            ? await stream.ReadAsync(bytes.Buffer.Array, bytes.Buffer.Offset, bytes.Length, token.Value).ConfigureAwait(false)
-                            : await stream.ReadAsync(bytes.Buffer.Array, bytes.Buffer.Offset, bytes.Length).ConfigureAwait(false);
-
-                        EnsureNotDisposed();
-
-                        if (read == 0)
-                            throw new EndOfStreamException("Stream ended without reaching end of json content");
-                        bytes.Valid = read;
-                        bytes.Used = 0;
-                        maxSize -= read;
-                        if (maxSize < 0)
-                            throw new ArgumentException($"The maximum size allowed for {documentId} ({maxSize}) has been exceeded, aborting");
-                    }
-                    parser.SetBuffer(bytes);
-                    var result = builder.Read();
-                    bytes.Used += parser.BufferOffset;
-                    if (result)
-                        break;
-                }
-                builder.FinalizeDocument();
-
-                var reader = builder.CreateReader();
-                return reader;
-            }
-            finally
-            {
-                streamDisposer?.Dispose();
-                DisposeIfNeeded(generation, parser, builder);
-            }
-        }
-
-        private void DisposeIfNeeded(int generation, UnmanagedJsonParser parser, BlittableJsonDocumentBuilder builder)
-        {
-            // if the generation has changed, that means that we had reset the context
-            // this can happen if we were waiting on an async call for a while, got timed out / error / something
-            // and the context was reset before we got back from the async call
-            // since the full context was reset, there is no point in trying to dispose things, they were already 
-            // taken care of
-            if (generation == _generation)
-            {
-                parser?.Dispose();
-                builder?.Dispose();
-            }
-        }
-
         private void ThrowObjectDisposed()
         {
             throw new ObjectDisposedException(nameof(JsonOperationContext));
-        }
-
-        protected internal virtual void Renew()
-        {
-            _arenaAllocator.RenewArena();
-            if (_arenaAllocatorForLongLivedValues == null)
-            {
-                _arenaAllocatorForLongLivedValues = new ArenaMemoryAllocator(LowMemoryFlag, _longLivedSize);
-                CachedProperties = new CachedProperties(this);
-            }
         }
 
         protected internal virtual unsafe void Reset(bool forceReleaseLongLivedAllocator = false)
@@ -663,8 +360,7 @@ namespace Sparrow.Json
 
                 _fieldNames.Clear();
                 CachedProperties = null; // need to release this so can be collected
-            }
-            _arenaAllocator.ResetArena();
+            }            
             _numberOfAllocatedStringsValues = 0;
             _generation = _generation + 1;
 
@@ -680,12 +376,6 @@ namespace Sparrow.Json
 
                 _pooledArrays = null;
             }
-        }
-
-        public void Write(Stream stream, BlittableJsonReaderObject json)
-        {
-            EnsureNotDisposed();
-           
         }
 
 
@@ -731,24 +421,6 @@ namespace Sparrow.Json
             return float.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
         }
 
-        public unsafe bool TryParseFloat(byte* ptr, int length, out float val)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return float.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe long ParseLong(byte* ptr, int length)
-        {
-            EnsureNotDisposed();
-            var stringBuffer = InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return long.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
-        }
-
         public unsafe bool TryParseLong(byte* ptr, int length, out long val)
         {
             EnsureNotDisposed();
@@ -756,15 +428,6 @@ namespace Sparrow.Json
 
             // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
             return long.TryParse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture, out val);
-        }
-
-        public unsafe ulong ParseULong(byte* ptr, int length)
-        {
-            EnsureNotDisposed();
-            var stringBuffer= InitializeStringBufferForNumberParsing(ptr, length);
-
-            // ReSharper disable once ReturnValueOfPureMethodIsNotUsed
-            return ulong.Parse(stringBuffer, NumberStyles.Any, CultureInfo.InvariantCulture);
         }
 
         public unsafe bool TryParseULong(byte* ptr, int length, out ulong val)
@@ -825,24 +488,6 @@ namespace Sparrow.Json
             return _arenaAllocator.GrowAllocation(allocation, sizeIncrease);
         }
 
-        public MemoryStream CheckoutMemoryStream()
-        {
-            EnsureNotDisposed();
-            if (_cachedMemoryStreams.Count == 0)
-            {
-                return new MemoryStream();
-            }
-
-            return _cachedMemoryStreams.Pop();
-        }
-
-        public void ReturnMemoryStream(MemoryStream stream)
-        {
-            EnsureNotDisposed();
-            stream.SetLength(0);
-            _cachedMemoryStreams.Push(stream);
-        }
-
         public void ReturnMemory(AllocatedMemoryData allocation)
         {
             EnsureNotDisposed();
@@ -865,8 +510,7 @@ namespace Sparrow.Json
 
         public AvoidOverAllocationScope AvoidOverAllocation()
         {
-            EnsureNotDisposed();
-            _arenaAllocator.AvoidOverAllocation = true;
+            EnsureNotDisposed();            
             return new AvoidOverAllocationScope(this);
         }
 
@@ -879,31 +523,10 @@ namespace Sparrow.Json
             }
 
             public void Dispose()
-            {
-                _parent._arenaAllocator.AvoidOverAllocation = false;
+            {                
             }
         }
 
         private Dictionary<Type, (Action<Array> Releaser, List<Array> Array)> _pooledArrays = null;
-
-        public T[] AllocatePooledArray<T>(int size)
-        {
-            if (_pooledArrays == null)
-                _pooledArrays = new Dictionary<Type, (Action<Array> Releaser, List<Array> Array)>();
-            
-            
-
-            if (_pooledArrays.TryGetValue(typeof(T), out var allocationsArray) == false)
-            {
-                void Releaser(Array x) => ArrayPool<T>.Shared.Return((T[])x, true);
-
-                allocationsArray = (Releaser, new List<Array>());
-                _pooledArrays[typeof(T)] = allocationsArray;
-            }
-
-            var allocatedArray = ArrayPool<T>.Shared.Rent(size);
-            allocationsArray.Array.Add(allocatedArray);
-            return allocatedArray;
-        }
     }
 }

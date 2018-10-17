@@ -16,15 +16,7 @@ namespace Sparrow.Json.Parsing
         {
             (byte)'-', (byte)'I', (byte)'n', (byte)'f', (byte)'i', (byte)'n', (byte)'i', (byte)'t', (byte)'y'
         };
-        public static readonly byte[] NaNBuffer = { (byte)'"', (byte)'N', (byte)'a', (byte)'N', (byte)'"' };
-        public static readonly byte[] PositiveInfinityBuffer =
-        {
-            (byte)'"', (byte)'I', (byte)'n', (byte)'f', (byte)'i', (byte)'n', (byte)'i', (byte)'t', (byte)'y', (byte)'"'
-        };
-        public static readonly byte[] NegativeInfinityBuffer =
-        {
-            (byte)'"', (byte)'-', (byte)'I', (byte)'n', (byte)'f', (byte)'i', (byte)'n', (byte)'i', (byte)'t', (byte)'y', (byte)'"'
-        };
+        
         public static readonly byte[] NullBuffer = { (byte)'n', (byte)'u', (byte)'l', (byte)'l', };
         public static readonly byte[] TrueBuffer = { (byte)'t', (byte)'r', (byte)'u', (byte)'e', };
         public static readonly byte[] FalseBuffer = { (byte)'f', (byte)'a', (byte)'l', (byte)'s', (byte)'e', };
@@ -123,42 +115,12 @@ namespace Sparrow.Json.Parsing
             _pos = 0;
         }
 
-        public int BufferSize
-        {
-            [MethodImpl((MethodImplOptions.AggressiveInlining))]
-            get { return (int)_bufSize; }
-        }
-
         public int BufferOffset
         {
             [MethodImpl(MethodImplOptions.AggressiveInlining)]
             get { return (int)_pos; }
         }
-
-
-        public void NewDocument()
-        {
-            _maybeBeforePreamble = true;
-            var previous = _unmanagedWriteBuffer.SizeInBytes;
-            _unmanagedWriteBuffer.Dispose();
-            _unmanagedWriteBuffer = new UnmanagedWriteBuffer(_ctx, _ctx.GetMemory(1024*16));
-        }
-
-        public (bool Done, int BytesRead) Copy(byte* output, int count)
-        {
-            var amountToCopy = Math.Min(count, _bufSize - _pos);
-            Memory.Copy(output, _inputBuffer + _pos, amountToCopy);
-            _pos += (uint)amountToCopy;
-            return (count == amountToCopy, (int)amountToCopy);
-        }
-
-        public (bool Done, int BytesRead) Skip(int count)
-        {
-            var amountToCopy = Math.Min(count, _bufSize - _pos);
-            _pos += (uint)amountToCopy;
-            return (count == amountToCopy, (int)amountToCopy);
-        }
-
+        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool Read()
         {
@@ -733,8 +695,7 @@ NotANumber:
             }
             return true;
         }
-
-        private const byte NoSubstitution = 0;
+        
         private const byte Unlikely = 1;
         private static readonly byte[] ParseStringTable;
 
@@ -893,42 +854,6 @@ ReturnFalse:
         }
 
 
-        public void ValidateFloat()
-        {
-            try
-            {
-                int numLength = _unmanagedWriteBuffer.SizeInBytes;
-
-                if (numLength <= 100)
-                {
-                    byte* tmpBuff = stackalloc byte[numLength];
-                    _unmanagedWriteBuffer.CopyTo(tmpBuff);
-                    _ctx.ParseDouble(tmpBuff, numLength);
-                }
-                else
-                {
-                    var memoryForNumber = _ctx.GetMemory(numLength);
-
-                    try
-                    {
-                        _unmanagedWriteBuffer.CopyTo(memoryForNumber.Address);                        
-                        _ctx.ParseDouble(memoryForNumber.Address, numLength);
-                    }
-                    finally
-                    {
-                        _ctx.ReturnMemory(memoryForNumber);
-                    }
-
-                }
-                
-            }
-#pragma warning disable RDB0004 // Exception handler is empty or just logging
-            catch (Exception e)
-            {
-                ThrowException("Could not parse double", e);                
-            }
-#pragma warning restore RDB0004 // Exception handler is empty or just logging
-        }
 
 
         protected void ThrowException(string message, Exception inner = null)

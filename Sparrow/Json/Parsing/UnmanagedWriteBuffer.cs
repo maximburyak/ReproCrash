@@ -52,25 +52,6 @@ namespace Sparrow.Json.Parsing
             {
                 return (Segment)MemberwiseClone();
             }
-
-#if DEBUG
-            public int Depth
-            {
-                get
-                {
-                    int count = 1;
-                    var prev = Previous;
-                    while (prev != null)
-                    {
-                        count++;
-                        prev = prev.Previous;
-                    }
-                    return count;
-                }
-            }
-
-            public string DebugInfo => Encoding.UTF8.GetString(Address, Used);
-#endif
         }
 
         private Segment _head;
@@ -104,10 +85,6 @@ namespace Sparrow.Json.Parsing
                 AccumulatedSizeInBytes = 0
             };
 
-#if MEM_GUARD
-            AllocatedBy = Environment.StackTrace;
-            FreedBy = null;
-#endif
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -127,11 +104,7 @@ namespace Sparrow.Json.Parsing
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowOnDisposed()
         {
-#if DEBUG
-            // PERF: This check will only happen in debug mode because it will fail with a NRE anyways on release.
-            if (IsDisposed)
-                throw new ObjectDisposedException(nameof(UnmanagedWriteBuffer));
-#endif
+
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -169,9 +142,6 @@ namespace Sparrow.Json.Parsing
 
         private void WriteUnlikely(byte* buffer, int count)
         {
-            Debug.Assert(count >= 0); // count is a size
-            Debug.Assert(buffer + count >= buffer); // overflow check
-
             var amountPending = count;
             var head = _head;
             do
@@ -238,26 +208,8 @@ namespace Sparrow.Json.Parsing
         {
             ThrowOnDisposed();
 
-//            var head = _head;
-//            if (head.Used == head.Allocation.SizeInBytes)
-//                goto Grow; // PERF: Diminish the size of the most common path.
-//
-//            head.AccumulatedSizeInBytes++;
-//            *(head.Address + head.Used) = data;
-//            head.Used++;
             return;
 
-//Grow:
-//            WriteByteUnlikely(data);
-        }
-
-        private void WriteByteUnlikely(byte data)
-        {
-            AllocateNextSegment(1, true);
-            var head = _head;
-            head.AccumulatedSizeInBytes++;
-            *(head.Address + head.Used) = data;
-            head.Used++;
         }
 
         public int CopyTo(byte* pointer)
@@ -292,10 +244,6 @@ namespace Sparrow.Json.Parsing
             if (IsDisposed)
                 return;
 
-#if MEM_GUARD
-            FreedBy = Environment.StackTrace;
-#endif
-
             // The actual lifetime of the _head Segment is unbounded: it will
             // be released by the GC when we no longer have any references to
             // it (i.e. no more copies of this struct)
@@ -313,12 +261,7 @@ namespace Sparrow.Json.Parsing
                 // This is used to signal that Dispose has run to other copies
                 head.Address = null;
 
-#if DEBUG
-                // Helps to avoid program errors, albeit unnecessary
-                head.Allocation = null;
-                head.AccumulatedSizeInBytes = -1;
-                head.Used = -1;
-#endif
+
 
                 // `next` is used to keep a reference to the previous Segment.
                 // Since `next` lives only within this for loop and we clear up
@@ -329,10 +272,6 @@ namespace Sparrow.Json.Parsing
             }
         }
 
-#if MEM_GUARD
-        public string AllocatedBy;
-        public string FreedBy;
-#endif
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public unsafe void EnsureSingleChunk(JsonParserState state)
