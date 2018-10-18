@@ -62,7 +62,7 @@ namespace Sparrow.Json
         {        
         }
 
-        private bool ReadInternal<TWriteStrategy>() where TWriteStrategy : IWriteStrategy
+        private bool ReadInternal()
         {
             Stack<BuildingState> continuationState;
             BuildingState currentState;
@@ -202,7 +202,7 @@ namespace Sparrow.Json
                             currentState.State = ContinuationState.ReadPropertyName;
                             continue;
                         case ContinuationState.ReadValue:
-                            ReadJsonValue<TWriteStrategy>();
+                            ReadJsonValue();
                             currentState = _continuationState.Pop();
                             break;
                     }
@@ -225,7 +225,7 @@ namespace Sparrow.Json
             if (_continuationState.Count == 0)
                 return false; //nothing to do
 
-            return ReadInternal<WriteFull>();
+            return ReadInternal();
         }
 
         private bool ReadMaybeModifiedPropertyName()
@@ -248,26 +248,18 @@ namespace Sparrow.Json
             throw new InvalidDataException("Expected start of object, but got " + _state.CurrentTokenType + _reader.GenerateErrorState());
         }
 
-        private interface IWriteStrategy { }
-        private struct WriteFull : IWriteStrategy { }
-        private struct WriteNone : IWriteStrategy { }
-
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private unsafe void ReadJsonValue<TWriteStrategy>() where TWriteStrategy : IWriteStrategy
+        private unsafe void ReadJsonValue() 
         {
             int start = 1;
             JsonParserToken current = _state.CurrentTokenType;
             if (current == JsonParserToken.String)
             {
                 BlittableJsonToken stringToken = BlittableJsonToken.Null;                
-                if (typeof(TWriteStrategy) == typeof(WriteNone) == false)                
-                {
-                    if ((_mode & UsageMode.CompressSmallStrings) == 0 && _state.StringSize < 128)
-                    {                     
-                        stringToken = BlittableJsonToken.String;
-                    }                    
-                }
+                if ((_mode & UsageMode.CompressSmallStrings) == 0 && _state.StringSize < 128)
+                {                     
+                    stringToken = BlittableJsonToken.String;
+                }                    
                 
                 _writeToken = new WriteToken(start, stringToken);
             }          
@@ -277,11 +269,11 @@ namespace Sparrow.Json
             }
             else if (current != JsonParserToken.EndObject)
             {
-                ReadJsonValueUnlikely<TWriteStrategy>(current);
+                ReadJsonValueUnlikely(current);
             }
         }
 
-        private unsafe void ReadJsonValueUnlikely<TWriteStrategy>(JsonParserToken current) where TWriteStrategy : IWriteStrategy
+        private unsafe void ReadJsonValueUnlikely(JsonParserToken current)
         {            
             switch (current)
             {
@@ -319,7 +311,7 @@ namespace Sparrow.Json
             CompleteArrayValue
         }
 
-        public struct BuildingState
+        public class BuildingState
         {
             public ContinuationState State;
             public int MaxPropertyId;            
@@ -340,7 +332,7 @@ namespace Sparrow.Json
         }
 
 
-        public struct PropertyTag
+        public class PropertyTag
         {
             public int Position;
               
@@ -363,7 +355,7 @@ namespace Sparrow.Json
             ToDisk = ValidateDouble | CompressStrings
         }
 
-        public struct WriteToken
+        public class WriteToken
         {
             public int ValuePos;
             public BlittableJsonToken WrittenToken;

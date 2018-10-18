@@ -3,10 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 namespace Sparrow.Threading
-{
-    public interface IDisposeOnceOperationMode {}
-    public struct ExceptionRetry : IDisposeOnceOperationMode { }
-    
+{    
     public sealed class DisposeOnce        
     {
         private readonly Action _action;

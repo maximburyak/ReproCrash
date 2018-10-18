@@ -7,9 +7,8 @@ using Voron.Platform.Posix;
 
 namespace Sparrow.Json.Parsing
 {
-    public unsafe struct UnmanagedWriteBuffer
+    public unsafe class UnmanagedWriteBuffer
     {        
-
         private class Segment
         {
             /// <summary>
@@ -94,16 +93,13 @@ namespace Sparrow.Json.Parsing
         public void WriteByte(byte data)
         {
             ThrowOnDisposed();
-
             return;
-
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public void Clear()
         {
             ThrowOnDisposed();
-
             _head.Used = 0;
             _head.AccumulatedSizeInBytes = 0;            
         }
