@@ -7,18 +7,7 @@ namespace Sparrow.Json.Parsing
 {
     public unsafe class UnmanagedJsonParser : IJsonParser
     {
-        private static readonly byte[] NaN = { (byte)'N', (byte)'a', (byte)'N' };
-        private static readonly byte[] PositiveInfinity =
-        {
-            (byte)'I', (byte)'n', (byte)'f', (byte)'i', (byte)'n', (byte)'i', (byte)'t', (byte)'y'
-        };
-        private static readonly byte[] NegativeInfinity =
-        {
-            (byte)'-', (byte)'I', (byte)'n', (byte)'f', (byte)'i', (byte)'n', (byte)'i', (byte)'t', (byte)'y'
-        };        
         public static readonly byte[] NullBuffer = { (byte)'n', (byte)'u', (byte)'l', (byte)'l', };
-        public static readonly byte[] TrueBuffer = { (byte)'t', (byte)'r', (byte)'u', (byte)'e', };
-        public static readonly byte[] FalseBuffer = { (byte)'f', (byte)'a', (byte)'l', (byte)'s', (byte)'e', };
         public static readonly byte[] Utf8Preamble = Encoding.UTF8.GetPreamble();
         private readonly string _debugTag;
         private UnmanagedWriteBuffer _unmanagedWriteBuffer;        
@@ -34,22 +23,9 @@ namespace Sparrow.Json.Parsing
         private byte _currentQuote;
         private byte[] _expectedTokenBuffer;
         private int _expectedTokenBufferPosition;
-        private string _expectedTokenString;
-        private bool _zeroPrefix;
-        private bool _isNegative;
-        private bool _isFractionedDouble;
-        private bool _isOverflow;
-        private bool _isExponent;
+        private string _expectedTokenString;       
         private bool _escapeMode;
-        private bool _maybeBeforePreamble = true;
-        private enum ParseNumberAction
-        {            
-            ParseNumber,
-            ParseEnd,
-            ParseUnlikely
-        }
-
-        private static readonly ParseNumberAction[] ParseNumberTable;
+        private bool _maybeBeforePreamble = true;    
 
         static UnmanagedJsonParser()
         {
@@ -66,18 +42,6 @@ namespace Sparrow.Json.Parsing
             ParseStringTable['\r'] = Unlikely;
             ParseStringTable['u'] = Unlikely;
 
-            ParseNumberTable = new ParseNumberAction[255];
-
-            ParseNumberTable['-'] = ParseNumberAction.ParseNumber;
-            for (byte ch = (byte)'0'; ch <= '9'; ch++)
-                ParseNumberTable[ch] = ParseNumberAction.ParseNumber;
-
-            ParseNumberTable['}'] = ParseNumberTable[']'] = ParseNumberTable[','] = ParseNumberTable[' '] = ParseNumberAction.ParseEnd;
-            ParseNumberTable['\t'] = ParseNumberTable['\v'] = ParseNumberTable['\f'] = ParseNumberAction.ParseEnd;
-
-            ParseNumberTable['.'] = ParseNumberTable['e'] = ParseNumberTable['E'] = ParseNumberAction.ParseUnlikely;
-            ParseNumberTable['-'] = ParseNumberTable['+'] = ParseNumberAction.ParseUnlikely;
-            ParseNumberTable['\r'] = ParseNumberTable['\n'] = ParseNumberAction.ParseUnlikely;
         }
 
         public UnmanagedJsonParser(JsonOperationContext ctx, JsonParserState state, string debugTag)
@@ -118,7 +82,7 @@ MainLoop:
                 _charPos++;
 
                 if (b == ':' || b == ',')
-                {
+                {                    
                     if (state.CurrentTokenType == JsonParserToken.Separator || state.CurrentTokenType == JsonParserToken.StartObject || state.CurrentTokenType == JsonParserToken.StartArray)
                         goto Error;
 
@@ -188,15 +152,12 @@ ReturnFalse:
             return false;
 
 
-ReadContinuation: // PERF: This is a "manual procedure"
-            if (state.Continuation != JsonParserTokenContinuation.None) // parse normally
-            {
-                return ContinueParsingValue();
-            }
+ReadContinuation: // PERF: This is a "manual procedure"            
 
             state.Continuation = JsonParserTokenContinuation.None;
             if (_maybeBeforePreamble)
-            {
+            {                   
+                System.Console.Out.Flush();
                 if (ReadMaybeBeforePreamble() == false)
                     return false;
             }
@@ -205,7 +166,7 @@ ReadContinuation: // PERF: This is a "manual procedure"
         }     
 
         private bool ReadUnlikely(byte b, ref uint pos, out bool couldRead)
-        {
+        {            
             couldRead = false;
             switch (b)
             {
@@ -227,36 +188,10 @@ ReadContinuation: // PERF: This is a "manual procedure"
                         _line++;
                         _charPos = 1;
                         return false;
-                    }
-
-                case (byte)' ':
-                case (byte)'\t':
-                case (byte)'\v':
-                case (byte)'\f':
-                    //white space, we can safely ignore
-                    return false;
-
-                case (byte)'N':
-                    {
-                        ReadToken(ref pos, ref couldRead, NaN, "NaN", JsonParserTokenContinuation.PartialNaN);
-                        return true;
-                    }
-
-                case (byte)'I':
-                    {
-                        ReadToken(ref pos, ref couldRead, PositiveInfinity, "Infinity", JsonParserTokenContinuation.PartialPositiveInfinity);
-                        return true;
-                    }
-
-                case (byte)'-':
-                    {
-                        _zeroPrefix = false;
-                        ReadToken(ref pos, ref couldRead, NegativeInfinity, "-Infinity", JsonParserTokenContinuation.PartialNegativeInfinity);
-                        return true;
-                    }
+                    }               
 
                 case (byte)'n':
-                    {
+                    {                        
                         _state.CurrentTokenType = JsonParserToken.Null;
                         _expectedTokenBuffer = NullBuffer;
                         _expectedTokenBufferPosition = 1;
@@ -269,63 +204,12 @@ ReadContinuation: // PERF: This is a "manual procedure"
 
                         couldRead = true;
                         return true;
-                    }
-
-                case (byte)'t':
-                    {
-                        _state.CurrentTokenType = JsonParserToken.True;
-                        _expectedTokenBuffer = TrueBuffer;
-                        _expectedTokenBufferPosition = 1;
-                        _expectedTokenString = "true";
-                        if (EnsureRestOfToken(ref pos) == false)
-                        {
-                            _state.Continuation = JsonParserTokenContinuation.PartialTrue;
-                            return true;
-                        }
-
-                        couldRead = true;
-                        return true;
-                    }
-
-                case (byte)'f':
-                    {
-                        _state.CurrentTokenType = JsonParserToken.False;
-                        _expectedTokenBuffer = FalseBuffer;
-                        _expectedTokenBufferPosition = 1;
-                        _expectedTokenString = "false";
-                        if (EnsureRestOfToken(ref pos) == false)
-                        {
-                            _state.Continuation = JsonParserTokenContinuation.PartialFalse;
-                            return true;
-                        }
-
-                        couldRead = true;
-                        return true;
-                    }
-            }
+                    }               
+            }            
 
             ThrowCannotHaveCharInThisPosition(b);
             return false;
-        }
-
-        private void ReadToken(ref uint pos, ref bool couldRead, byte[] tokenBuffer,
-            string tokenString, JsonParserTokenContinuation jsonParserTokenContinuation)
-        {
-            _unmanagedWriteBuffer.Clear();
-            _state.CurrentTokenType = JsonParserToken.Float;
-            _expectedTokenBuffer = tokenBuffer;
-            _expectedTokenBufferPosition = 1;
-            _expectedTokenString = tokenString;
-            if (EnsureRestOfToken(ref pos) == false)
-            {
-                _state.Continuation = jsonParserTokenContinuation;
-                return;
-            }
-
-            _unmanagedWriteBuffer.Write(tokenBuffer, 0, tokenBuffer.Length);
-            _unmanagedWriteBuffer.EnsureSingleChunk(_state);
-            couldRead = true;
-        }
+        }      
 
         private void ThrowCannotHaveCharInThisPosition(byte b)
         {
@@ -356,257 +240,7 @@ ReadContinuation: // PERF: This is a "manual procedure"
                 _maybeBeforePreamble = false;
             }
             return true;
-        }
-
-        private bool ContinueParsingValue()
-        {
-            switch (_state.Continuation)
-            {
-                case JsonParserTokenContinuation.PartialNegativeInfinity:
-                    // here we need to check if we have a negative number or negative
-                    // infinity 
-                    if (_expectedTokenBufferPosition == 1 &&
-                        _inputBuffer[_pos] != (byte)'I')
-                    {
-                        _zeroPrefix = false;
-                        _isNegative = true;
-                        _isFractionedDouble = false;
-                        _isOverflow = false;
-                        _isExponent = false;
-                        _state.Long = 0;
-                        _state.EscapePositions.Clear();
-                        _unmanagedWriteBuffer.Clear();
-                        _unmanagedWriteBuffer.WriteByte((byte)'-');
-                        _state.Continuation = JsonParserTokenContinuation.PartialNumber;
-                        goto case JsonParserTokenContinuation.PartialNumber;
-                    }
-                    goto case JsonParserTokenContinuation.PartialPositiveInfinity;
-                case JsonParserTokenContinuation.PartialNaN:
-                case JsonParserTokenContinuation.PartialPositiveInfinity:
-                    {
-                        if (EnsureRestOfToken(ref _pos) == false)
-                            return false;
-
-                        _state.Continuation = JsonParserTokenContinuation.None;
-                        _state.CurrentTokenType = JsonParserToken.Float;
-                        _unmanagedWriteBuffer.Write(_expectedTokenBuffer, 0, _expectedTokenBuffer.Length);
-                        _unmanagedWriteBuffer.EnsureSingleChunk(_state);
-
-                        return true;
-                    }
-                case JsonParserTokenContinuation.PartialNumber:
-                    {
-                        if (ParseNumber(ref _state.Long, ref _pos) == false)
-                            return false;
-
-                        if (_state.CurrentTokenType == JsonParserToken.Float)
-                            _unmanagedWriteBuffer.EnsureSingleChunk(_state);
-
-                        _state.Continuation = JsonParserTokenContinuation.None;
-
-                        return true;
-
-                    }
-                case JsonParserTokenContinuation.PartialPreamble:
-                    {
-                        if (EnsureRestOfToken(ref _pos) == false)
-                            return false;
-
-                        _state.Continuation = JsonParserTokenContinuation.None;
-
-                        return false;
-                    }
-                case JsonParserTokenContinuation.PartialString:
-                    {
-                        if (ParseString(ref _pos) == false)
-                            return false;
-
-                        _unmanagedWriteBuffer.EnsureSingleChunk(_state);
-                        _state.CurrentTokenType = JsonParserToken.String;
-                        _state.Continuation = JsonParserTokenContinuation.None;
-
-                        return true;
-
-                    }
-                case JsonParserTokenContinuation.PartialFalse:
-                    {
-                        if (EnsureRestOfToken(ref _pos) == false)
-                            return false;
-
-                        _state.CurrentTokenType = JsonParserToken.False;
-                        _state.Continuation = JsonParserTokenContinuation.None;
-
-                        return true;
-
-                    }
-                case JsonParserTokenContinuation.PartialTrue:
-                    {
-                        if (EnsureRestOfToken(ref _pos) == false)
-                            return false;
-
-                        _state.CurrentTokenType = JsonParserToken.True;
-                        _state.Continuation = JsonParserTokenContinuation.None;
-
-                        return true;
-                    }
-                case JsonParserTokenContinuation.PartialNull:
-                    {
-                        if (EnsureRestOfToken(ref _pos) == false)
-                            return false;
-
-                        _state.CurrentTokenType = JsonParserToken.Null;
-                        _state.Continuation = JsonParserTokenContinuation.None;
-
-                        return true;
-                    }
-                default:
-                    ThrowException("Somehow got continuation for single byte token " + _state.Continuation);
-                    return false; // never hit
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        private bool ParseNumber(ref long value, ref uint pos)
-        {
-            JsonParserState state = _state;
-
-            uint bufferSize = _bufSize;
-            byte* inputBuffer = _inputBuffer;
-            while (true)
-            {
-                if (pos >= bufferSize)
-                    goto NotANumber;
-
-                byte b = inputBuffer[pos];
-                byte digit = (byte)(b - (byte)'0');
-
-                _charPos++;
-                pos++;
-                if (digit <= 9) // PERF: Simplified the check to get rid of 1 comparison
-                {
-                    // PERF: This is a fast loop for the most common characters found on numbers.
-                    var next = (value * 10) + digit;
-
-                    if (next < value) //overflow
-                        _isOverflow = true;
-
-                    value = next;
-
-
-                    _unmanagedWriteBuffer.WriteByte(b);
-
-                    continue;
-                }
-
-                if (b == ' ' || b == ',' || b == '}' || b == ']' || ParseNumberTable[b] == ParseNumberAction.ParseEnd)
-                {
-                    if (!_zeroPrefix || _unmanagedWriteBuffer.SizeInBytes == 1)
-                    {
-                        if (_isNegative)
-                            value *= -1;
-
-                        state.CurrentTokenType = (_isFractionedDouble || _isOverflow) ? JsonParserToken.Float : JsonParserToken.Integer;
-
-                        pos--;
-                        _charPos--;// need to re-read this char
-
-                        goto IsANumber;
-                    }
-
-                    ThrowWhenMalformed("Invalid number with zero prefix");
-                    break;
-                }
-
-                if (ParseNumberTable[b] == ParseNumberAction.ParseUnlikely)
-                {
-                    if (ParseNumberUnlikely(b, ref pos, ref value, state))
-                        goto IsANumber;
-
-                    _unmanagedWriteBuffer.WriteByte(b);
-                    continue;
-                }
-
-                // No hit, we are done.
-                ThrowWhenMalformed("Number cannot end with char with: '" + (char)b + "' (" + b + ")");
-            }
-
-IsANumber:
-            return true;
-
-NotANumber:
-            return false; // Will never execute.
-        }
-
-        private bool ParseNumberUnlikely(byte b, ref uint pos, ref long value, JsonParserState state)
-        {
-            switch (b)
-            {
-                case (byte)'.':
-                    {
-                        if (!_isFractionedDouble)
-                        {
-                            _zeroPrefix = false; // 0.5, frex
-                            _isFractionedDouble = true;
-                            break;
-                        }
-
-                        ThrowWhenMalformed("Already got '.' in this number value");
-                        break;
-                    }
-                case (byte)'+':
-                    break; // just record, appears in 1.4e+3
-                case (byte)'e':
-                case (byte)'E':
-                    {
-                        if (_isExponent)
-                            ThrowWhenMalformed("Already got 'e' in this number value");
-                        _isExponent = true;
-                        _isFractionedDouble = true;
-                        break;
-                    }
-                case (byte)'-':
-                    {
-                        if (!_isNegative || _isExponent != false)
-                        {
-                            _isNegative = true;
-                            break;
-                        }
-
-                        ThrowWhenMalformed("Already got '-' in this number value");
-                        break;
-                    }
-
-                case (byte)'\r':
-                case (byte)'\n':
-                    {
-                        _line++;
-                        _charPos = 1;
-
-                        if (!_zeroPrefix || _unmanagedWriteBuffer.SizeInBytes == 1)
-                        {
-                            if (_isNegative)
-                                value *= -1;
-
-                            state.CurrentTokenType = (_isFractionedDouble || _isOverflow) ? JsonParserToken.Float : JsonParserToken.Integer;
-
-                            pos--;
-                            _charPos--; // need to re-read this char
-
-                            return true;
-                        }
-
-                        ThrowWhenMalformed("Invalid number with zero prefix");
-                        break;
-                    }
-            }
-
-            return false;
-        }
-
-        private void ThrowWhenMalformed(string message)
-        {
-            ThrowException(message);
-        }
+        }     
 
         private bool EnsureRestOfToken(ref uint pos)
         {
@@ -783,10 +417,6 @@ ReturnFalse:
             var byteCount = Encoding.UTF8.GetBytes(chars, 1, smallBuffer, 8);
             _unmanagedWriteBuffer.Write(smallBuffer, byteCount);
         }
-
-
-
-
         protected void ThrowException(string message, Exception inner = null)
         {
             throw new InvalidDataException($"{message} at {GenerateErrorState()}", inner);
