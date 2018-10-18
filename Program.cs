@@ -19,7 +19,7 @@ namespace Repro
             var random = new Random();
             for (int ss = 0; ss < 100; ss++)
             {                
-              //  Console.WriteLine("************ " + ss + " ***********");
+                Console.WriteLine("************ " + ss + " ***********");
                 Parallel.For(0, 20, a =>
                 {
                     string readAllText = File.ReadAllText("tmpcommand.txt");
