@@ -7,18 +7,9 @@ namespace Sparrow.Json.Parsing
     {
         public const int EscapePositionItemSize = 5;
         public byte* StringBuffer;
-        public int StringSize;
-        public int? CompressedSize;
-        public long Long;
+        public int StringSize;                
         public JsonParserToken CurrentTokenType;
-        public JsonParserTokenContinuation Continuation;
-
-        public readonly List<int> EscapePositions = new List<int>();
-
-        public JsonParserState()
-        {
-          
-        }
+        public JsonParserTokenContinuation Continuation;        
        
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static void WriteVariableSizeInt(ref byte* dest, int value)
@@ -31,40 +22,7 @@ namespace Sparrow.Json.Parsing
                 v >>= 7;
             }
             *dest++ = (byte)(v);
-        }
-
-        public static int FindEscapePositionsMaxSize(string str)
-        {
-            var count = 0;
-            
-            for (int i = 0; i < str.Length; i++)
-            {
-                byte value = (byte)str[i];
-
-                // PERF: We use the values directly because it is 5x faster than iterating over a constant array.
-                // 8  => '\b' => 0000 1000
-                // 9  => '\t' => 0000 1001
-                // 13 => '\r' => 0000 1101
-                // 10 => '\n' => 0000 1010
-                // 12 => '\f' => 0000 1100
-                // 34 => '\\' => 0010 0010
-                // 92 =>  '"' => 0101 1100
-
-                if (value == 92 || value == 34 || (value >= 8 && value <= 13 && value != 11))
-                    count++;
-            }
-
-            // we take 5 because that is the max number of bytes for variable size int
-            // plus 1 for the actual number of positions
-
-            // NOTE: this is used by FindEscapePositionsIn, change only if you also modify FindEscapePositionsIn
-            return (count + 1) * EscapePositionItemSize; 
-        }
-
-        public void FindEscapePositionsIn(byte* str, int len, int previousComputedMaxSize)
-        {
-            FindEscapePositionsIn(EscapePositions, str, len, previousComputedMaxSize);
-        }
+        }      
 
         public static void FindEscapePositionsIn(List<int> buffer, byte* str, int len, int previousComputedMaxSize)
         {
@@ -99,15 +57,9 @@ namespace Sparrow.Json.Parsing
         }
 
         public int WriteEscapePositionsTo(byte* buffer)
-        {
-            var escapePositions = EscapePositions;
+        {            
             var originalBuffer = buffer;
-            WriteVariableSizeInt(ref buffer, escapePositions.Count);
-
-            // PERF: Using a for in this way will evict the bounds-check and also avoid the cost of using an struct enumerator. 
-            for (int i = 0; i < escapePositions.Count; i++)
-                WriteVariableSizeInt(ref buffer, escapePositions[i]);
-
+            WriteVariableSizeInt(ref buffer, 0);
             return (int)(buffer - originalBuffer);
         }
     }

@@ -15,9 +15,7 @@ namespace Sparrow.Json
             Address = (byte*) Marshal.AllocHGlobal(size);
             SizeInBytes = size;
         }
-        public int SizeInBytes;
-        public int ContextGeneration;
-        public JsonOperationContext Parent;
+        public int SizeInBytes;                
         public byte* Address;
     }
 }

@@ -60,19 +60,6 @@ namespace Sparrow.Json
             if (IsDisposed)
                 ThrowAlreadyDisposed();          
             IsDisposed = true;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Renew(string str, byte* buffer, int size)
-        {
-            Debug.Assert(size >= 0);
-            _size = size;
-            _buffer = buffer;
-            _string = str;
-            _length = -1;
-            EscapePositions = null;
-            IsDisposed = false;
-            AllocatedMemoryData = null;
-        }
+        }      
     }
 }

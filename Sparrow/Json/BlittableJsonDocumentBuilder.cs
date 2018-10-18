@@ -9,17 +9,13 @@ namespace Sparrow.Json
 {
     public sealed class BlittableJsonDocumentBuilder : IDisposable
     {
-
         private static readonly string UnderscoreSegment = "_";
-
         private readonly Stack<BuildingState> _continuationState = new Stack<BuildingState>();
-
         private readonly JsonOperationContext _context;
         private UsageMode _mode;
         private readonly IJsonParser _reader;
         private readonly JsonParserState _state;
         private LazyStringValue _fakeFieldName;
-
         private WriteToken _writeToken;
         private string _debugTag;        
 
@@ -264,31 +260,17 @@ namespace Sparrow.Json
             JsonParserToken current = _state.CurrentTokenType;
             if (current == JsonParserToken.String)
             {
-                BlittableJsonToken stringToken = BlittableJsonToken.Null;
-                if (typeof(TWriteStrategy) == typeof(WriteNone))
+                BlittableJsonToken stringToken = BlittableJsonToken.Null;                
+                if (typeof(TWriteStrategy) == typeof(WriteNone) == false)                
                 {
-                    //    start = _writer.WriteValue(_state.StringBuffer, _state.StringSize, _state.EscapePositions, out stringToken, _mode, _state.CompressedSize);
-                }
-                else // WriteFull
-                {
-                    if (_state.EscapePositions.Count == 0 && _state.CompressedSize == null && (_mode & UsageMode.CompressSmallStrings) == 0 && _state.StringSize < 128)
-                    {
-                        //   start = _writer.WriteValue(_state.StringBuffer, _state.StringSize);
+                    if ((_mode & UsageMode.CompressSmallStrings) == 0 && _state.StringSize < 128)
+                    {                     
                         stringToken = BlittableJsonToken.String;
-                    }
-                    else
-                    {
-                        //      start = _writer.WriteValue(_state.StringBuffer, _state.StringSize, _state.EscapePositions, out stringToken, _mode, _state.CompressedSize);
-                    }
+                    }                    
                 }
-                _state.CompressedSize = null;
+                
                 _writeToken = new WriteToken(start, stringToken);
-            }
-            else if (current == JsonParserToken.Integer)
-            {
-                // start = _writer.WriteValue(_state.Long);
-                _writeToken = new WriteToken(start, BlittableJsonToken.Integer);
-            }
+            }          
             else if (current == JsonParserToken.StartObject)
             {
                 _continuationState.Push(new BuildingState(ContinuationState.ReadObject));
@@ -305,18 +287,10 @@ namespace Sparrow.Json
             {
                 case JsonParserToken.StartArray:
                     _continuationState.Push(new BuildingState(ContinuationState.ReadArray));
-                    return;
-                case JsonParserToken.Float:
-                    return;
+                    return;            
                 case JsonParserToken.True:
-                case JsonParserToken.False:
-                    // start = _writer.WriteValue(current == JsonParserToken.True ? (byte)1 : (byte)0);
-                    //_writeToken = new WriteToken(start, BlittableJsonToken.Boolean);
-                    return;
-                case JsonParserToken.Null:
-                    // nothing to do here, we handle that with the token
-                    //   start = _writer.WriteValue((byte)0);
-                    //_writeToken = new WriteToken(start, BlittableJsonToken.Null);
+                case JsonParserToken.False:                    
+                case JsonParserToken.Null:                    
                     return;
             }
 

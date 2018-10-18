@@ -126,7 +126,6 @@ MainLoop:
 
 ParseString:
             {
-                state.EscapePositions.Clear();
                 _unmanagedWriteBuffer.Clear();
                 _prevEscapePosition = 0;
                 _currentQuote = b;
@@ -217,7 +216,7 @@ ReadContinuation: // PERF: This is a "manual procedure"
         }
 
         private bool ReadMaybeBeforePreamble()
-        {
+        {            
             if (_pos >= _bufSize)
             {
                 return false;
@@ -243,7 +242,7 @@ ReadContinuation: // PERF: This is a "manual procedure"
         }     
 
         private bool EnsureRestOfToken(ref uint pos)
-        {
+        {            
             uint bufferSize = _bufSize;
             byte* inputBuffer = _inputBuffer;
             byte[] expectedTokenBuffer = _expectedTokenBuffer;
@@ -263,7 +262,6 @@ ReadContinuation: // PERF: This is a "manual procedure"
         
         private const byte Unlikely = 1;
         private static readonly byte[] ParseStringTable;
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private bool ParseString(ref uint currentPos)
         {
@@ -301,12 +299,7 @@ ReadContinuation: // PERF: This is a "manual procedure"
                     {
                         _currentStrStart++;
                         _escapeMode = false;
-                        _charPos++;
-                        if (b != (byte)'u' && b != (byte)'/')
-                        {
-                            _state.EscapePositions.Add(_unmanagedWriteBuffer.SizeInBytes - _prevEscapePosition);
-                            _prevEscapePosition = _unmanagedWriteBuffer.SizeInBytes + 1;
-                        }
+                        _charPos++;                        
 
                         byte op = parseStringTable[b];
                         if (op > Unlikely)
@@ -363,8 +356,6 @@ ReturnFalse:
         {
             throw new InvalidOperationException("Invalid escape char, numeric value is " + b);
         }
-
-
         private bool ParseUnicodeValue(ref uint pos)
         {
             byte b;

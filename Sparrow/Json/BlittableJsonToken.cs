@@ -8,7 +8,6 @@ namespace Sparrow.Json
     [Flags]
     public enum BlittableJsonToken : byte
     {        
-        Integer = 3,     
         String = 5,        
         Null = 8        
     }
