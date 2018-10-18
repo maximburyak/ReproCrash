@@ -15,8 +15,7 @@ namespace Sparrow.Json
         private byte* _buffer;        
         public byte* Buffer => _buffer;
         private int _size;
-        public int Size => _size;
-        private int _length;        
+        public int Size => _size;            
         public AllocatedMemoryData AllocatedMemoryData;
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -24,8 +23,7 @@ namespace Sparrow.Json
         {            
             _size = size;
             _buffer = buffer;
-            _string = str;
-            _length = -1;
+            _string = str;        
         }   
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

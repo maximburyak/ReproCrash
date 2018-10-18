@@ -46,10 +46,10 @@ namespace Sparrow.Json.Parsing
 
         public UnmanagedJsonParser(JsonOperationContext ctx, JsonParserState state, string debugTag)
         {
-            _ctx = ctx;
+
             _state = state;
             _debugTag = debugTag;
-            _unmanagedWriteBuffer = new UnmanagedWriteBuffer(ctx, ctx.GetMemory(1024*16));
+            _unmanagedWriteBuffer = new UnmanagedWriteBuffer(ctx.GetMemory(1024*16));
         }     
 
         public void SetBuffer(byte* inputBuffer, int size)
@@ -221,23 +221,8 @@ ReadContinuation: // PERF: This is a "manual procedure"
             {
                 return false;
             }
-
-            if (_inputBuffer[_pos] == Utf8Preamble[0])
-            {
-                _pos++;
-                _expectedTokenBuffer = Utf8Preamble;
-                _expectedTokenBufferPosition = 1;
-                _expectedTokenString = "UTF8 Preamble";
-                if (EnsureRestOfToken(ref _pos) == false)
-                {
-                    _state.Continuation = JsonParserTokenContinuation.PartialPreamble;
-                    return false;
-                }
-            }
-            else
-            {
-                _maybeBeforePreamble = false;
-            }
+            
+            _maybeBeforePreamble = false;            
             return true;
         }     
 

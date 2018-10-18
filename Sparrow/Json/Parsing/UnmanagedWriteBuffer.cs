@@ -8,8 +8,7 @@ using Voron.Platform.Posix;
 namespace Sparrow.Json.Parsing
 {
     public unsafe struct UnmanagedWriteBuffer
-    {
-        private readonly JsonOperationContext _context;
+    {        
 
         private class Segment
         {
@@ -50,12 +49,8 @@ namespace Sparrow.Json.Parsing
         // possible that this particular copy may have _head != null.
         public bool IsDisposed => _head == null || _head.Address == null;
 
-        public UnmanagedWriteBuffer(JsonOperationContext context, AllocatedMemoryData allocatedMemoryData)
-        {
-            Debug.Assert(context != null);
-            Debug.Assert(allocatedMemoryData != null);
-
-            _context = context;
+        public UnmanagedWriteBuffer(AllocatedMemoryData allocatedMemoryData)
+        {            
             _head = new Segment
             {                
                 Allocation = allocatedMemoryData,
@@ -64,21 +59,7 @@ namespace Sparrow.Json.Parsing
                 AccumulatedSizeInBytes = 0
             };
 
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public void Write(byte[] buffer, int start, int count)
-        {
-            Debug.Assert(start >= 0 && start < buffer.Length); // start is an index
-            Debug.Assert(count >= 0); // count is a size
-            Debug.Assert(start + count <= buffer.Length); // can't overrun the buffer
-
-            fixed (byte* bufferPtr = buffer)
-            {
-                Debug.Assert(bufferPtr + start >= bufferPtr); // overflow check
-                Write(bufferPtr + start, count);
-            }
-        }
+        }       
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private void ThrowOnDisposed()

@@ -29,7 +29,7 @@ namespace Sparrow.Json
 
         public JsonOperationContext()
         {            
-            _disposeOnceRunner = new DisposeOnce<ExceptionRetry>(() =>
+            _disposeOnceRunner = new DisposeOnce(() =>
             {
                 Reset(true);
 
@@ -53,7 +53,7 @@ namespace Sparrow.Json
             var allocatedMemory = new AllocatedMemoryData(requestedSize);                        
             return allocatedMemory;
         }    
-        private readonly DisposeOnce<ExceptionRetry> _disposeOnceRunner;
+        private readonly DisposeOnce _disposeOnceRunner;
         private bool Disposed => _disposeOnceRunner.Disposed;
         public  void Dispose()
         {
