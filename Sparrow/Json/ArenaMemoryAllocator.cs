@@ -58,14 +58,7 @@ namespace Sparrow.Json
     {
         public int SizeInBytes;
         public int ContextGeneration;
-
         public JsonOperationContext Parent;
-
-
-
-
         public byte* Address;
-
-
     }
 }

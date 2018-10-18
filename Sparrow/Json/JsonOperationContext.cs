@@ -120,48 +120,6 @@ namespace Sparrow.Json
             _documentBuilder = new BlittableJsonDocumentBuilder(this, _jsonParserState, null);            
         }
 
-        public ReturnBuffer GetManagedBuffer(out ManagedPinnedBuffer buffer)
-        {
-            EnsureNotDisposed();
-            buffer= new ManagedPinnedBuffer(this);
-            buffer.Buffer = new ArraySegment<byte>(new byte[1024*64]);
-            buffer.Handle = GCHandle.Alloc(buffer.Buffer.Array, GCHandleType.Pinned);
-            buffer.Valid = buffer.Used = 0;
-            return new ReturnBuffer(buffer, this);
-        }
-
-        public struct ReturnBuffer : IDisposable
-        {
-            private  ManagedPinnedBuffer _buffer;
-            private readonly JsonOperationContext _parent;
-
-            public ReturnBuffer(ManagedPinnedBuffer buffer, JsonOperationContext parent)
-            {
-                _buffer = buffer;
-                _parent = parent;
-            }
-
-            public void Dispose()
-            {
-                if (_buffer == null)
-                    return;
-
-                //_parent disposal sets _managedBuffers to null,
-                //throwing ObjectDisposedException() to make it more visible
-                if (_parent.Disposed)
-                    ThrowParentWasDisposed();
-
-                _parent._managedBuffers.Push(_buffer);
-                _buffer = null;
-            }
-
-            private void ThrowParentWasDisposed()
-            {
-                throw new ObjectDisposedException(
-                    "ReturnBuffer should not be disposed after it's parent operation context was disposed");
-            }
-        }
-
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public AllocatedMemoryData GetMemory(int requestedSize)
         {

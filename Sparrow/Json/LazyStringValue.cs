@@ -9,8 +9,7 @@ using System.Text;
 namespace Sparrow.Json
 {
     // PERF: Sealed because in CoreCLR 2.0 it will devirtualize virtual calls methods like GetHashCode.
-    public sealed unsafe class LazyStringValue :IEquatable<string>,
-        IEquatable<LazyStringValue>, IDisposable
+    public sealed unsafe class LazyStringValue :IDisposable
     {
         internal JsonOperationContext __context;
         internal JsonOperationContext _context
@@ -39,9 +38,6 @@ namespace Sparrow.Json
 
         private int _length;
 
-        [ThreadStatic]
-        private static byte[] _lazyStringTempComparisonBuffer;
-
         public int[] EscapePositions;
         public AllocatedMemoryData AllocatedMemoryData;
 
@@ -59,108 +55,8 @@ namespace Sparrow.Json
         static LazyStringValue()
         {
             // ThreadLocalCleanup.ReleaseThreadLocalState += CleanBuffers;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(string other)
-        {
-
-            if (_string != null)
-                return string.Equals(_string, other, StringComparison.Ordinal);
-
-            var sizeInBytes = Encoding.UTF8.GetMaxByteCount(other.Length);
-
-            if (_lazyStringTempComparisonBuffer == null || _lazyStringTempComparisonBuffer.Length < other.Length)
-                _lazyStringTempComparisonBuffer = new byte[(sizeInBytes)];
-
-            fixed (char* pOther = other)
-            fixed (byte* pBuffer = _lazyStringTempComparisonBuffer)
-            {
-                var tmpSize = Encoding.UTF8.GetBytes(pOther, other.Length, pBuffer, sizeInBytes);
-                if (Size != tmpSize)
-                    return false;
-
-                return Memory.CompareInline(Buffer, pBuffer, tmpSize) == 0;
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public bool Equals(LazyStringValue other)
-        {
-            int size = Size;
-            if (other.Size != size)
-                return false;
-
-            return Memory.CompareInline(Buffer, other.Buffer, size) == 0;
-        }
-
-        public int CompareTo(string other)
-        {
-            if (_string != null)
-                return string.Compare(_string, other, StringComparison.Ordinal);
-
-            var sizeInBytes = Encoding.UTF8.GetMaxByteCount(other.Length);
-
-            if (_lazyStringTempComparisonBuffer == null || _lazyStringTempComparisonBuffer.Length < other.Length)
-                _lazyStringTempComparisonBuffer = new byte[(sizeInBytes)];
-
-            fixed (char* pOther = other)
-            fixed (byte* pBuffer = _lazyStringTempComparisonBuffer)
-            {
-                var tmpSize = Encoding.UTF8.GetBytes(pOther, other.Length, pBuffer, sizeInBytes);
-                return Compare(pBuffer, tmpSize);
-            }
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int CompareTo(LazyStringValue other)
-        {
-            if (other.Buffer == Buffer && other.Size == Size)
-                return 0;
-            return Compare(other.Buffer, other.Size);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public int Compare(byte* other, int otherSize)
-        {
-            int size = Size;
-            var result = Memory.CompareInline(Buffer, other, Math.Min(size, otherSize));
-            return result == 0 ? size - otherSize : result;
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool operator ==(LazyStringValue self, LazyStringValue str)
-        {
-            if (ReferenceEquals(self, str))
-                return true;
-
-            if (ReferenceEquals(self, null))
-                return false;
-            if (ReferenceEquals(str, null))
-                return false;
-
-            return self.Equals(str);
-        }
-
-        public static bool operator !=(LazyStringValue self, LazyStringValue str)
-        {
-            return !(self == str);
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static bool operator ==(LazyStringValue self, string str)
-        {
-            if (ReferenceEquals(self, null) && str == null)
-                return true;
-            if (ReferenceEquals(self, null) || str == null)
-                return false;
-            return self.Equals(str);
-        }
-
-        public static bool operator !=(LazyStringValue self, string str)
-        {
-            return !(self == str);
-        }
+        }      
+   
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public static implicit operator string(LazyStringValue self)
@@ -169,29 +65,7 @@ namespace Sparrow.Json
                 return null;
             return self._string ??
                 (self._string = Encoding.UTF8.GetString(self._buffer, self._size));
-        }
-
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static implicit operator byte[] (LazyStringValue self)
-        {
-            var valueAsString = (string)self;
-            return Convert.FromBase64String(valueAsString);
-        }
-     
-        public override bool Equals(object obj)
-        {
-            if (ReferenceEquals(obj, null))
-                return false;
-
-            var s = obj as string;
-            if (s != null)
-                return Equals(s);
-            var comparer = obj as LazyStringValue;
-            if (comparer != null)
-                return Equals(comparer);
-
-            return ReferenceEquals(obj, this);
-        }
+        }     
 
         public unsafe override int GetHashCode()
         {
@@ -201,28 +75,7 @@ namespace Sparrow.Json
         public override string ToString()
         {
             return (string)this; // invoke the implicit string conversion
-        }
-
-        public int CompareTo(object obj)
-        {
-            if (IsDisposed)
-                ThrowAlreadyDisposed();
-
-            if (obj == null)
-                return 1;
-
-            var lsv = obj as LazyStringValue;
-
-            if (lsv != null)
-                return CompareTo(lsv);
-
-            var s = obj as string;
-
-            if (s != null)
-                return CompareTo(s);
-
-            throw new NotSupportedException($"Cannot compare LazyStringValue to object of type {obj.GetType().Name}");
-        }
+        }     
 
         public bool IsDisposed;
 
